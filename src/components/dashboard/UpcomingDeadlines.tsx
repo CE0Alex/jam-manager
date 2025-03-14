@@ -32,23 +32,8 @@ export default function UpcomingDeadlines() {
   const navigate = useNavigate();
   const { dashboardMetrics, staff, jobs } = useAppContext();
 
-  // Calculate upcoming deadlines directly from jobs
-  const today = new Date();
-  const cutoffDate = new Date(today);
-  cutoffDate.setDate(today.getDate() + 7);
-
-  const upcomingDeadlines = jobs
-    .filter((job) => {
-      const deadline = new Date(job.deadline);
-      return (
-        job.status !== "completed" &&
-        job.status !== "cancelled" &&
-        deadline <= cutoffDate
-      );
-    })
-    .sort(
-      (a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime(),
-    );
+  // Use the pre-calculated metrics from context instead of recalculating
+  const upcomingDeadlines = dashboardMetrics.upcomingDeadlines || [];
 
   const getStaffName = (staffId?: string) => {
     if (!staffId) return "Unassigned";

@@ -154,6 +154,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Calculate dashboard metrics based on current data
   const calculateDashboardMetrics = () => {
+    // Ensure we're working with the latest data
+    const currentJobs = jobs;
+    const currentSchedule = schedule;
+    const currentStaff = staff;
+    const currentMachines = machines;
     // Calculate job status distribution
     const jobStatusDistribution: Record<JobStatus, number> = {
       pending: 0,
@@ -163,13 +168,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelled: 0,
     };
 
-    jobs.forEach((job) => {
+    currentJobs.forEach((job) => {
       jobStatusDistribution[job.status]++;
     });
 
     // Calculate upcoming deadlines
     const today = new Date();
-    const upcomingDeadlines = jobs
+    const upcomingDeadlines = currentJobs
       .filter((job) => {
         const deadline = new Date(job.deadline);
         const cutoffDate = addDays(today, 7);
@@ -186,8 +191,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Calculate staff workload
     const staffWorkload: Record<string, number> = {};
-    staff.forEach((staffMember) => {
-      const assignedJobsCount = jobs.filter(
+    currentStaff.forEach((staffMember) => {
+      const assignedJobsCount = currentJobs.filter(
         (job) => job.assignedTo === staffMember.id,
       ).length;
       staffWorkload[staffMember.id] = assignedJobsCount;
@@ -195,8 +200,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Calculate machine utilization
     const machineUtilization: Record<string, number> = {};
-    machines.forEach((machine) => {
-      const machineEvents = schedule.filter(
+    currentMachines.forEach((machine) => {
+      const machineEvents = currentSchedule.filter(
         (event) => event.machineId === machine.id,
       );
       const totalHours = machineEvents.reduce((total, event) => {
@@ -212,8 +217,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
 
     // Calculate overall capacity utilization
-    const totalCapacity = staff.length * 40; // 40 hours per week per staff
-    const totalScheduled = schedule.reduce((total, event) => {
+    const totalCapacity = currentStaff.length * 40; // 40 hours per week per staff
+    const totalScheduled = currentSchedule.reduce((total, event) => {
       const start = new Date(event.startTime);
       const end = new Date(event.endTime);
       return total + (end.getTime() - start.getTime()) / (1000 * 60 * 60);
@@ -234,7 +239,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Refresh dashboard metrics
   const refreshDashboard = () => {
-    setDashboardMetrics(calculateDashboardMetrics());
+    // Force a recalculation with the latest data
+    const updatedMetrics = calculateDashboardMetrics();
+    setDashboardMetrics(updatedMetrics);
   };
 
   // Save data to localStorage when it changes
@@ -287,7 +294,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteJob = (id: string) => {
+    // Remove the job from jobs array
     setJobs(jobs.filter((job) => job.id !== id));
+
+    // Also remove any schedule events associated with this job
+    setSchedule(schedule.filter((event) => event.jobId !== id));
   };
 
   const getJobById = (id: string) => {
@@ -308,7 +319,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteStaffMember = (id: string) => {
+    // Remove staff member
     setStaff(staff.filter((s) => s.id !== id));
+
+    // Update any jobs that were assigned to this staff member
+    setJobs(
+      jobs.map((job) => {
+        if (job.assignedTo === id) {
+          return {
+            ...job,
+            assignedTo: undefined,
+            updatedAt: format(new Date(), "yyyy-MM-dd"),
+          };
+        }
+        return job;
+      }),
+    );
+
+    // Remove staff from any scheduled events
+    setSchedule(
+      schedule.map((event) => {
+        if (event.staffId === id) {
+          return { ...event, staffId: undefined };
+        }
+        return event;
+      }),
+    );
   };
 
   const getStaffById = (id: string) => {
@@ -329,7 +365,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteMachine = (id: string) => {
+    // Remove machine
     setMachines(machines.filter((m) => m.id !== id));
+
+    // Update any schedule events that used this machine
+    setSchedule(
+      schedule.map((event) => {
+        if (event.machineId === id) {
+          return { ...event, machineId: undefined };
+        }
+        return event;
+      }),
+    );
   };
 
   const getMachineById = (id: string) => {
