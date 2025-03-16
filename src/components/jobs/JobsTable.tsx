@@ -30,6 +30,7 @@ interface JobsTableProps {
   onEditJob?: (jobId: string) => void;
   onDeleteJob?: (jobId: string) => void;
   onAssignJob?: (jobId: string) => void;
+  onCreateJob?: () => void;
 }
 
 type SortField =
@@ -47,6 +48,7 @@ const JobsTable = ({
   onEditJob = () => {},
   onDeleteJob = () => {},
   onAssignJob = () => {},
+  onCreateJob,
 }: JobsTableProps) => {
   const navigate = useNavigate();
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
@@ -116,6 +118,15 @@ const JobsTable = ({
     );
   };
 
+  const handleCreateJob = () => {
+    if (onCreateJob) {
+      onCreateJob();
+    } else {
+      navigate("/jobs/new");
+    }
+    console.log("Create job button clicked");
+  };
+
   return (
     <div className="w-full bg-white rounded-md border">
       {jobs.length === 0 ? (
@@ -123,10 +134,6 @@ const JobsTable = ({
           <p className="text-muted-foreground mb-4">
             No jobs found. Create a new job to get started.
           </p>
-          <Button onClick={() => navigate("/jobs/new")}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create New Job
-          </Button>
         </div>
       ) : (
         <Table>

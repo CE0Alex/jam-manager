@@ -13,6 +13,7 @@ import {
   JobStatus,
   FeedbackItem,
   Machine,
+  JobType,
 } from "@/types";
 import {
   mockStaff,
@@ -78,9 +79,27 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: ReactNode }) {
   // Load data from localStorage or use mock data as defaults
   const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
-    const storedData = localStorage.getItem(key);
-    return storedData ? JSON.parse(storedData) : defaultValue;
+    try {
+      const storedData = localStorage.getItem(key);
+      return storedData ? JSON.parse(storedData) : defaultValue;
+    } catch (error) {
+      console.error(`Error loading ${key} from localStorage:`, error);
+      return defaultValue;
+    }
   };
+
+  // Clear localStorage to ensure fresh data
+  useEffect(() => {
+    try {
+      const hasInitialized = localStorage.getItem("hasInitialized");
+      if (!hasInitialized) {
+        localStorage.clear();
+        localStorage.setItem("hasInitialized", "true");
+      }
+    } catch (error) {
+      console.error("Error initializing localStorage:", error);
+    }
+  }, []);
 
   // State for jobs, staff, schedule
   const [jobs, setJobs] = useState<Job[]>(loadFromStorage("jobs", mockJobs));
@@ -244,37 +263,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDashboardMetrics(updatedMetrics);
   };
 
-  // Save data to localStorage when it changes
+  // Save data to localStorage when it changes - with debounce and error handling
+  const saveToStorage = (key: string, data: any) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (error) {
+      console.error(`Error saving ${key} to localStorage:`, error);
+    }
+  };
+
+  // Use a more efficient approach to save data and refresh dashboard
   useEffect(() => {
-    localStorage.setItem("jobs", JSON.stringify(jobs));
-    // Refresh dashboard metrics whenever jobs change
-    refreshDashboard();
+    const timeoutId = setTimeout(() => {
+      saveToStorage("jobs", jobs);
+      refreshDashboard();
+    }, 300); // Debounce for 300ms
+    return () => clearTimeout(timeoutId);
   }, [jobs]);
 
   useEffect(() => {
-    localStorage.setItem("staff", JSON.stringify(staff));
-    // Refresh dashboard metrics whenever staff changes
-    refreshDashboard();
+    const timeoutId = setTimeout(() => {
+      saveToStorage("staff", staff);
+      refreshDashboard();
+    }, 300);
+    return () => clearTimeout(timeoutId);
   }, [staff]);
 
   useEffect(() => {
-    localStorage.setItem("machines", JSON.stringify(machines));
-    // Refresh dashboard metrics whenever machines change
-    refreshDashboard();
+    const timeoutId = setTimeout(() => {
+      saveToStorage("machines", machines);
+      refreshDashboard();
+    }, 300);
+    return () => clearTimeout(timeoutId);
   }, [machines]);
 
   useEffect(() => {
-    localStorage.setItem("schedule", JSON.stringify(schedule));
-    // Refresh dashboard metrics whenever schedule changes
-    refreshDashboard();
+    const timeoutId = setTimeout(() => {
+      saveToStorage("schedule", schedule);
+      refreshDashboard();
+    }, 300);
+    return () => clearTimeout(timeoutId);
   }, [schedule]);
 
   useEffect(() => {
-    localStorage.setItem("feedback", JSON.stringify(feedback));
+    const timeoutId = setTimeout(() => {
+      saveToStorage("feedback", feedback);
+    }, 300);
+    return () => clearTimeout(timeoutId);
   }, [feedback]);
 
   // Job functions
-  const addJob = (job: Omit<Job, "id" | "createdAt" | "updatedAt">) => {
+  const addJob = (job: Omit<Job, "id" | "createdAt" | "updatedAt">): Job => {
     const now = format(new Date(), "yyyy-MM-dd");
     const newJob: Job = {
       ...job,
@@ -283,6 +322,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
     };
     setJobs([...jobs, newJob]);
+    return newJob;
   };
 
   const updateJob = (job: Job) => {
@@ -415,9 +455,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Find available staff
     const availableStaff = staff.filter((s) => {
-      // Check if staff has capacity (simplified for demo)
-      const staffEvents = schedule.filter((e) => e.staffId === s.id);
-      return staffEvents.length < 5; // Arbitrary limit for demo
+      // Check if staff has capacity
+      return (
+        s.availability.monday ||
+        s.availability.tuesday ||
+        s.availability.wednesday ||
+        s.availability.thursday ||
+        s.availability.friday
+      ); // At least one day available
     });
 
     if (availableStaff.length === 0) return null;
@@ -425,18 +470,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Pick first available staff for simplicity
     const selectedStaff = availableStaff[0];
 
-    // Find a suitable time slot (simplified)
-    const today = new Date();
-    today.setHours(9, 0, 0, 0); // Start at 9 AM
+    // Find a suitable time slot based on staff availability
+    const nextAvailableSlot = findNextAvailableTimeSlot(
+      selectedStaff.id,
+      job.estimatedHours,
+    );
+    if (!nextAvailableSlot) return null;
 
     // Create a new schedule event
     const newEvent: Omit<ScheduleEvent, "id"> = {
       jobId,
       staffId: selectedStaff.id,
-      startTime: today.toISOString(),
-      endTime: new Date(
-        today.getTime() + job.estimatedHours * 60 * 60 * 1000,
-      ).toISOString(),
+      startTime: nextAvailableSlot.startTime.toISOString(),
+      endTime: nextAvailableSlot.endTime.toISOString(),
+      isAutoScheduled: true,
     };
 
     // Add the event to the schedule
@@ -449,6 +496,181 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Return the created event
     return createdEvent;
+  };
+
+  // Find the next available time slot for a staff member
+  const findNextAvailableTimeSlot = (
+    staffId: string,
+    requiredHours: number,
+  ) => {
+    const staffMember = staff.find((s) => s.id === staffId);
+    if (!staffMember) return null;
+
+    // Get all existing events for this staff member
+    const staffEvents = schedule
+      .filter((event) => event.staffId === staffId)
+      .sort(
+        (a, b) =>
+          new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+      );
+
+    // Start from today
+    let currentDate = new Date();
+    currentDate.setHours(9, 0, 0, 0); // Start at 9 AM
+
+    // Try to find a slot in the next 14 days
+    for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+      const checkDate = addDays(currentDate, dayOffset);
+      const dayOfWeek = format(checkDate, "EEEE").toLowerCase();
+
+      // Skip days when staff is not available
+      if (
+        !staffMember.availability[
+          dayOfWeek as keyof typeof staffMember.availability
+        ]
+      ) {
+        continue;
+      }
+
+      // Get availability hours for this day
+      const availabilityHours =
+        staffMember.availabilityHours?.[
+          dayOfWeek as keyof typeof staffMember.availabilityHours
+        ];
+      if (!availabilityHours) {
+        // Default hours if not specified
+        const dayStart = new Date(checkDate);
+        dayStart.setHours(9, 0, 0, 0);
+
+        const dayEnd = new Date(checkDate);
+        dayEnd.setHours(17, 0, 0, 0);
+
+        // Check for existing events on this day
+        const dayEvents = staffEvents.filter((event) => {
+          const eventStart = new Date(event.startTime);
+          return (
+            format(eventStart, "yyyy-MM-dd") === format(checkDate, "yyyy-MM-dd")
+          );
+        });
+
+        // Find available slot
+        const slot = findSlotInDay(dayStart, dayEnd, dayEvents, requiredHours);
+        if (slot) return slot;
+
+        continue;
+      }
+
+      // Parse start and end times
+      const [startHour, startMinute] = availabilityHours.start
+        .split(":")
+        .map(Number);
+      const [endHour, endMinute] = availabilityHours.end.split(":").map(Number);
+
+      // Set day start and end times
+      const dayStart = new Date(checkDate);
+      dayStart.setHours(startHour, startMinute, 0, 0);
+
+      const dayEnd = new Date(checkDate);
+      dayEnd.setHours(endHour, endMinute, 0, 0);
+
+      // Get events for this day
+      const dayEvents = staffEvents.filter((event) => {
+        const eventStart = new Date(event.startTime);
+        return (
+          format(eventStart, "yyyy-MM-dd") === format(checkDate, "yyyy-MM-dd")
+        );
+      });
+
+      // Find available slot
+      const slot = findSlotInDay(dayStart, dayEnd, dayEvents, requiredHours);
+      if (slot) return slot;
+    }
+
+    // If we get here, we couldn't find a suitable slot
+    return null;
+  };
+
+  // Helper function to find an available slot in a day
+  const findSlotInDay = (
+    dayStart: Date,
+    dayEnd: Date,
+    dayEvents: ScheduleEvent[],
+    requiredHours: number,
+  ) => {
+    // If no events, the whole day is available
+    if (dayEvents.length === 0) {
+      // Check if we have enough hours in the day
+      const availableHours =
+        (dayEnd.getTime() - dayStart.getTime()) / (1000 * 60 * 60);
+
+      if (availableHours >= requiredHours) {
+        // We can fit the job in this day
+        const endTime = new Date(dayStart);
+        endTime.setTime(dayStart.getTime() + requiredHours * 60 * 60 * 1000);
+
+        return {
+          startTime: dayStart,
+          endTime: endTime,
+        };
+      } else {
+        // Not enough hours in this day
+        return null;
+      }
+    }
+
+    // Sort events by start time
+    dayEvents.sort(
+      (a, b) =>
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    );
+
+    // Check for gaps between events
+    let timePointer = new Date(dayStart);
+
+    for (const event of dayEvents) {
+      const eventStart = new Date(event.startTime);
+
+      // If there's a gap before this event
+      if (eventStart.getTime() > timePointer.getTime()) {
+        const gapHours =
+          (eventStart.getTime() - timePointer.getTime()) / (1000 * 60 * 60);
+
+        if (gapHours >= requiredHours) {
+          // We found a suitable gap
+          const endTime = new Date(timePointer);
+          endTime.setTime(
+            timePointer.getTime() + requiredHours * 60 * 60 * 1000,
+          );
+
+          return {
+            startTime: timePointer,
+            endTime: endTime,
+          };
+        }
+      }
+
+      // Move pointer to after this event
+      timePointer = new Date(event.endTime);
+    }
+
+    // Check if there's time after the last event
+    if (timePointer.getTime() < dayEnd.getTime()) {
+      const remainingHours =
+        (dayEnd.getTime() - timePointer.getTime()) / (1000 * 60 * 60);
+
+      if (remainingHours >= requiredHours) {
+        // We can fit the job after the last event
+        const endTime = new Date(timePointer);
+        endTime.setTime(timePointer.getTime() + requiredHours * 60 * 60 * 1000);
+
+        return {
+          startTime: timePointer,
+          endTime: endTime,
+        };
+      }
+    }
+
+    return null;
   };
 
   // Feedback functions

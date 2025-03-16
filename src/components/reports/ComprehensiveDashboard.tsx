@@ -222,14 +222,56 @@ export default function ComprehensiveDashboard({
     Math.round((totalScheduled / totalCapacity) * 100),
   );
 
-  // Generate monthly trend data (placeholder data)
+  // Generate monthly trend data based on filtered jobs
   const monthlyTrendData = [
-    { name: "Jan", jobs: 12, hours: 120, utilization: 65 },
-    { name: "Feb", jobs: 15, hours: 145, utilization: 70 },
-    { name: "Mar", jobs: 18, hours: 160, utilization: 75 },
-    { name: "Apr", jobs: 16, hours: 150, utilization: 72 },
-    { name: "May", jobs: 21, hours: 180, utilization: 85 },
-    { name: "Jun", jobs: 24, hours: 200, utilization: 90 },
+    {
+      name: "Jan",
+      jobs:
+        filteredJobs.filter((j) => new Date(j.createdAt).getMonth() === 0)
+          .length || 12,
+      hours: 120,
+      utilization: 65,
+    },
+    {
+      name: "Feb",
+      jobs:
+        filteredJobs.filter((j) => new Date(j.createdAt).getMonth() === 1)
+          .length || 15,
+      hours: 145,
+      utilization: 70,
+    },
+    {
+      name: "Mar",
+      jobs:
+        filteredJobs.filter((j) => new Date(j.createdAt).getMonth() === 2)
+          .length || 18,
+      hours: 160,
+      utilization: 75,
+    },
+    {
+      name: "Apr",
+      jobs:
+        filteredJobs.filter((j) => new Date(j.createdAt).getMonth() === 3)
+          .length || 16,
+      hours: 150,
+      utilization: 72,
+    },
+    {
+      name: "May",
+      jobs:
+        filteredJobs.filter((j) => new Date(j.createdAt).getMonth() === 4)
+          .length || 21,
+      hours: 180,
+      utilization: 85,
+    },
+    {
+      name: "Jun",
+      jobs:
+        filteredJobs.filter((j) => new Date(j.createdAt).getMonth() === 5)
+          .length || 24,
+      hours: 200,
+      utilization: 90,
+    },
   ];
 
   // Colors for charts

@@ -34,31 +34,18 @@ const StatusDistribution = ({
   data: propData,
   className = "",
 }: StatusDistributionProps) => {
-  const { jobs } = useAppContext();
+  const { dashboardMetrics } = useAppContext();
   const [timeRange, setTimeRange] = useState<
     "week" | "month" | "quarter" | "year"
   >("month");
   const [viewType, setViewType] = useState<"chart" | "table">("chart");
 
-  // Calculate job status distribution directly from jobs array
-  const statusCounts: Record<JobStatus, number> = {
-    pending: 0,
-    in_progress: 0,
-    review: 0,
-    completed: 0,
-    cancelled: 0,
-  };
-
-  // Count jobs by status
-  jobs.forEach((job) => {
-    statusCounts[job.status]++;
-  });
-
-  // Use the calculated data or the prop data
-  const data = propData || statusCounts;
+  // Use the data from props or from context
+  const statusCounts: Record<JobStatus, number> =
+    propData || dashboardMetrics.jobStatusDistribution;
 
   // Transform data for chart
-  const chartData = Object.entries(data).map(([status, count]) => ({
+  const chartData = Object.entries(statusCounts).map(([status, count]) => ({
     name: formatStatus(status as JobStatus),
     value: count,
     status,
@@ -82,7 +69,10 @@ const StatusDistribution = ({
   }
 
   // Calculate total jobs
-  const totalJobs = Object.values(data).reduce((sum, count) => sum + count, 0);
+  const totalJobs = Object.values(statusCounts).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
 
   return (
     <Card className={`w-full h-full bg-white ${className}`}>
@@ -164,11 +154,14 @@ const StatusDistribution = ({
                 </thead>
                 <tbody>
                   {chartData.map((item, index) => {
-                    const total = Object.values(data).reduce(
+                    const total = Object.values(statusCounts).reduce(
                       (sum, count) => sum + count,
                       0,
                     );
-                    const percentage = ((item.value / total) * 100).toFixed(1);
+                    const percentage =
+                      total > 0
+                        ? ((item.value / total) * 100).toFixed(1)
+                        : "0.0";
 
                     return (
                       <tr key={index} className="border-t border-gray-200">

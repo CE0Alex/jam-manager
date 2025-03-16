@@ -49,7 +49,6 @@ export default function JobForm({
     description: string;
     status: JobStatus;
     deadline: string;
-    assignedTo?: string;
     priority: JobPriority;
     fileUrl?: string;
     estimatedHours: number;
@@ -63,7 +62,6 @@ export default function JobForm({
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       "yyyy-MM-dd",
     ),
-    assignedTo: undefined,
     priority: "medium",
     jobType: "digital_printing",
     fileUrl: "",
@@ -83,7 +81,6 @@ export default function JobForm({
         description: job.description,
         status: job.status,
         deadline: job.deadline,
-        assignedTo: job.assignedTo,
         priority: job.priority,
         jobType: job.jobType,
         fileUrl: job.fileUrl || "",
@@ -218,10 +215,6 @@ export default function JobForm({
           ...formData,
           fileUrl: permanentFileUrl,
           estimatedHours: Number(formData.estimatedHours),
-          assignedTo:
-            formData.assignedTo === "unassigned"
-              ? undefined
-              : formData.assignedTo,
         });
         toast({
           title: "Success",
@@ -233,10 +226,6 @@ export default function JobForm({
           ...formData,
           fileUrl: permanentFileUrl,
           estimatedHours: Number(formData.estimatedHours),
-          assignedTo:
-            formData.assignedTo === "unassigned"
-              ? undefined
-              : formData.assignedTo,
         });
         toast({
           title: "Success",
@@ -437,24 +426,9 @@ export default function JobForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="assignedTo">Assigned To</Label>
-              <Select
-                value={formData.assignedTo || "unassigned"}
-                onValueChange={(value) =>
-                  handleSelectChange("assignedTo", value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select staff member" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {staff.map((member) => (
-                    <SelectItem key={member.id} value={member.id}>
-                      {member.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
+                Jobs will be assigned to staff during scheduling
+              </div>
             </div>
 
             <div className="space-y-2">

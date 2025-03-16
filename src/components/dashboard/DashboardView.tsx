@@ -14,7 +14,7 @@ interface DashboardViewProps {
 const DashboardView: React.FC<DashboardViewProps> = ({
   metrics: propMetrics,
 }) => {
-  const { jobs, dashboardMetrics } = useAppContext();
+  const { jobs, dashboardMetrics, refreshDashboard } = useAppContext();
   const [metrics, setMetrics] = useState<DashboardMetrics>(
     dashboardMetrics || {
       upcomingDeadlines: [],
@@ -29,6 +29,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({
       staffWorkload: {},
     },
   );
+
+  // Force a refresh of dashboard metrics when component mounts
+  useEffect(() => {
+    refreshDashboard();
+  }, [refreshDashboard]);
 
   // Calculate job status distribution directly from jobs array
   useEffect(() => {

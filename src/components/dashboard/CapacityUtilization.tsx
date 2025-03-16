@@ -19,6 +19,7 @@ import {
   Legend,
 } from "recharts";
 import { DashboardMetrics } from "@/types";
+import { useAppContext } from "@/context/AppContext";
 
 interface CapacityUtilizationProps {
   data?: {
@@ -63,13 +64,17 @@ const defaultData = {
 
 const CapacityUtilization: React.FC<CapacityUtilizationProps> = ({
   data = defaultData,
-  currentUtilization = 0,
+  currentUtilization,
 }) => {
+  const { dashboardMetrics } = useAppContext();
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly">("daily");
   const [department, setDepartment] = useState<string>("all");
 
   // Calculate utilization percentage for display
-  const utilizationPercentage = currentUtilization;
+  const utilizationPercentage =
+    currentUtilization !== undefined
+      ? currentUtilization
+      : dashboardMetrics.capacityUtilization;
   const utilizationColor =
     utilizationPercentage > 90
       ? "text-red-500"

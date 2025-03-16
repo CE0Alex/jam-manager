@@ -9,9 +9,10 @@ import { useAppContext } from "@/context/AppContext";
 
 interface JobsViewProps {
   jobs?: Job[];
+  onCreateJob?: () => void;
 }
 
-const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
+const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs, onCreateJob }) => {
   const navigate = useNavigate();
   const {
     jobs: contextJobs,
@@ -45,6 +46,14 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
     setJobFilters(filters);
   };
 
+  const handleCreateJob = () => {
+    if (onCreateJob) {
+      onCreateJob();
+    } else {
+      navigate("/jobs/new");
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
@@ -54,7 +63,7 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
             View and manage all print jobs in your system
           </p>
         </div>
-        <Button onClick={() => navigate("/jobs/new")}>
+        <Button onClick={handleCreateJob}>
           <Plus className="h-4 w-4 mr-2" />
           Create New Job
         </Button>
@@ -69,6 +78,7 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
         onViewJob={handleViewJob}
         onEditJob={handleEditJob}
         onDeleteJob={handleDeleteJob}
+        onCreateJob={handleCreateJob}
       />
     </div>
   );
