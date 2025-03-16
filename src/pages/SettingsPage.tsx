@@ -6,18 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Settings, Bell, Shield, Database } from "lucide-react";
+import { Settings, Bell, Shield, Database, Clock } from "lucide-react";
 import MainLayout from "@/components/layout/MainLayout";
+import BusinessHoursSettings from "@/components/settings/BusinessHoursSettings";
 
 export default function SettingsPage() {
   return (
     <MainLayout title="Settings">
       <div className="space-y-6">
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             <TabsTrigger value="general" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               <span>General</span>
+            </TabsTrigger>
+            <TabsTrigger value="business-hours" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span>Business Hours</span>
             </TabsTrigger>
             <TabsTrigger
               value="notifications"
@@ -35,6 +40,10 @@ export default function SettingsPage() {
               <span>Data Management</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="business-hours" className="space-y-6">
+            <BusinessHoursSettings />
+          </TabsContent>
 
           <TabsContent value="general" className="space-y-6">
             <Card>

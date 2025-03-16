@@ -363,6 +363,7 @@ export default function UnifiedJobWorkflow({
               <JobsFilter />
 
               <JobsTable
+                jobs={jobs}
                 onViewJob={handleViewJob}
                 onEditJob={handleEditJob}
                 onDeleteJob={handleDeleteJob}

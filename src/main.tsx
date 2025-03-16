@@ -9,19 +9,26 @@ import { initializeStorage } from "./lib/supabase";
 import { TempoDevtools } from "tempo-devtools";
 TempoDevtools.init();
 
-// Render the app immediately, then initialize storage in the background
-const rootElement = document.getElementById("root");
-if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <HashRouter>
-        <App />
-      </HashRouter>
-    </React.StrictMode>,
-  );
-} else {
-  console.error("Root element not found");
-}
+// Wait for DOM to be ready
+const initApp = () => {
+  const rootElement = document.getElementById("root");
+  if (rootElement) {
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode>
+        <HashRouter>
+          <App />
+        </HashRouter>
+      </React.StrictMode>
+    );
+  } else {
+    console.error("Root element not found");
+    // Wait and retry in case the DOM is still loading
+    setTimeout(initApp, 100);
+  }
+};
+
+// Start application
+initApp();
 
 // Initialize Supabase storage buckets in the background
 if (import.meta.env.DEV) {

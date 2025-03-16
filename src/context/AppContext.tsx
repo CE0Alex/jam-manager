@@ -14,6 +14,8 @@ import {
   FeedbackItem,
   Machine,
   JobType,
+  BusinessHours,
+  AppSettings,
 } from "@/types";
 import {
   mockStaff,
@@ -23,6 +25,7 @@ import {
   generateDashboardMetrics,
 } from "@/lib/mockData";
 import { addDays, format } from "date-fns";
+import { detectScheduleConflicts, hasScheduleConflicts } from "@/lib/scheduling";
 
 interface AppContextType {
   // Jobs
@@ -50,7 +53,7 @@ interface AppContextType {
 
   // Schedule
   schedule: ScheduleEvent[];
-  addScheduleEvent: (event: Omit<ScheduleEvent, "id">) => void;
+  addScheduleEvent: (event: Omit<ScheduleEvent, "id">) => ScheduleEvent;
   updateScheduleEvent: (event: ScheduleEvent) => void;
   deleteScheduleEvent: (id: string) => void;
   getScheduleForDate: (date: Date) => ScheduleEvent[];
@@ -63,6 +66,11 @@ interface AppContextType {
   // Dashboard
   dashboardMetrics: DashboardMetrics;
   refreshDashboard: () => void;
+  
+  // Settings
+  settings: AppSettings;
+  updateBusinessHours: (hours: BusinessHours) => void;
+  applyDefaultAvailabilityToStaff: (staffId?: string) => void;
 }
 
 interface JobFilters {
@@ -101,7 +109,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // State for jobs, staff, schedule
+  // Default business hours: 8am to 5pm
+  const defaultSettings: AppSettings = {
+    businessHours: {
+      start: "08:00",
+      end: "17:00",
+    },
+  };
+
+  // State for jobs, staff, schedule, settings
+  const [settings, setSettings] = useState<AppSettings>(
+    loadFromStorage("settings", defaultSettings),
+  );
   const [jobs, setJobs] = useState<Job[]>(loadFromStorage("jobs", mockJobs));
   const [staff, setStaff] = useState<StaffMember[]>(
     loadFromStorage("staff", mockStaff),
@@ -312,6 +331,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timeoutId);
   }, [feedback]);
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveToStorage("settings", settings);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [settings]);
+
   // Job functions
   const addJob = (job: Omit<Job, "id" | "createdAt" | "updatedAt">): Job => {
     const now = format(new Date(), "yyyy-MM-dd");
@@ -429,10 +455,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...event,
       id: `event-${Date.now()}`,
     };
+    
+    // Check for conflicts before adding the event
+    const conflicts = detectScheduleConflicts(newEvent, schedule, staff);
+    
+    // If there are conflicts with "error" severity, log them
+    const hasErrors = conflicts.some(conflict => conflict.severity === "error");
+    if (hasErrors) {
+      console.warn("Scheduling conflicts detected:", conflicts);
+      // Note: We still allow the event to be added, but we log the conflicts
+      // In a real application, you might want to make this configurable
+    }
+    
     setSchedule([...schedule, newEvent]);
+    return newEvent;
   };
 
   const updateScheduleEvent = (event: ScheduleEvent) => {
+    // Check for conflicts when updating an event
+    const conflicts = detectScheduleConflicts(event, schedule, staff, true);
+    
+    // If there are conflicts with "error" severity, log them
+    const hasErrors = conflicts.some(conflict => conflict.severity === "error");
+    if (hasErrors) {
+      console.warn("Scheduling conflicts detected during update:", conflicts);
+      // Note: We still allow the event to be updated, but we log the conflicts
+    }
+    
     setSchedule(schedule.map((e) => (e.id === event.id ? event : e)));
   };
 
@@ -682,6 +731,60 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setFeedback([...feedback, newFeedback]);
   };
 
+  // Settings functions
+  const updateBusinessHours = (hours: BusinessHours) => {
+    setSettings({
+      ...settings,
+      businessHours: hours,
+    });
+  };
+
+  // Apply default business hours to a staff member's availability
+  const applyDefaultAvailabilityToStaff = (staffId?: string) => {
+    const { start, end } = settings.businessHours;
+    
+    if (staffId) {
+      // Update a specific staff member
+      const staffMember = staff.find((s) => s.id === staffId);
+      if (!staffMember) return;
+
+      const updatedStaff = {
+        ...staffMember,
+        availabilityHours: {
+          monday: { start, end },
+          tuesday: { start, end },
+          wednesday: { start, end },
+          thursday: { start, end },
+          friday: { start, end },
+          saturday: staffMember.availability.saturday 
+            ? { start, end } 
+            : undefined,
+          sunday: staffMember.availability.sunday 
+            ? { start, end } 
+            : undefined,
+        },
+      };
+
+      updateStaffMember(updatedStaff);
+    } else {
+      // Update all staff members
+      const updatedStaff = staff.map((member) => ({
+        ...member,
+        availabilityHours: {
+          monday: member.availability.monday ? { start, end } : undefined,
+          tuesday: member.availability.tuesday ? { start, end } : undefined,
+          wednesday: member.availability.wednesday ? { start, end } : undefined,
+          thursday: member.availability.thursday ? { start, end } : undefined,
+          friday: member.availability.friday ? { start, end } : undefined,
+          saturday: member.availability.saturday ? { start, end } : undefined,
+          sunday: member.availability.sunday ? { start, end } : undefined,
+        },
+      }));
+
+      setStaff(updatedStaff);
+    }
+  };
+
   const contextValue: AppContextType = {
     // Jobs
     jobs,
@@ -721,6 +824,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Dashboard
     dashboardMetrics,
     refreshDashboard,
+    
+    // Settings
+    settings,
+    updateBusinessHours,
+    applyDefaultAvailabilityToStaff,
   };
 
   return (

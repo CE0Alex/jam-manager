@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { JobPriority, JobStatus, JobType, Job } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,9 @@ interface JobCreationFormProps {
 export default function JobCreationForm({
   onJobCreated,
 }: JobCreationFormProps) {
+  const navigate = useNavigate();
   const { addJob } = useAppContext();
+  const [createdJobId, setCreatedJobId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<{
     title: string;
@@ -136,6 +139,11 @@ export default function JobCreationForm({
         description: "Job created successfully",
       });
 
+      // Store the created job ID
+      if (newJob) {
+        setCreatedJobId(newJob.id);
+      }
+
       // Always call onJobCreated if a job was created successfully
       if (newJob && onJobCreated) {
         onJobCreated(newJob);
@@ -148,6 +156,11 @@ export default function JobCreationForm({
         variant: "destructive",
       });
     }
+  };
+  
+  const handleScheduleJob = () => {
+    // Navigate to the schedule page
+    navigate("/schedule/new");
   };
 
   return (
@@ -385,9 +398,20 @@ export default function JobCreationForm({
         </div>
 
         <div className="flex justify-end space-x-4">
-          <Button type="submit" variant="default">
-            Create Job & Continue to Scheduling
-          </Button>
+          {createdJobId ? (
+            <>
+              <Button type="button" variant="outline" onClick={() => navigate("/jobs")}>
+                View All Jobs
+              </Button>
+              <Button type="button" onClick={handleScheduleJob}>
+                Schedule This Job
+              </Button>
+            </>
+          ) : (
+            <Button type="submit" variant="default">
+              Create Job
+            </Button>
+          )}
         </div>
       </div>
     </form>

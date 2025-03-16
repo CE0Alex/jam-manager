@@ -34,7 +34,7 @@ export default function StaffForm({
   isEditing = false,
 }: StaffFormProps) {
   const navigate = useNavigate();
-  const { addStaffMember, updateStaffMember } = useAppContext();
+  const { addStaffMember, updateStaffMember, settings, applyDefaultAvailabilityToStaff } = useAppContext();
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -78,13 +78,13 @@ export default function StaffForm({
       sunday: false,
     },
     availabilityHours: {
-      monday: { start: "08:00", end: "17:00" },
-      tuesday: { start: "08:00", end: "17:00" },
-      wednesday: { start: "08:00", end: "17:00" },
-      thursday: { start: "08:00", end: "17:00" },
-      friday: { start: "08:00", end: "17:00" },
-      saturday: { start: "08:00", end: "17:00" },
-      sunday: { start: "08:00", end: "17:00" },
+      monday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      tuesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      wednesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      thursday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      friday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      saturday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      sunday: { start: settings.businessHours.start, end: settings.businessHours.end },
     },
   });
 
@@ -103,13 +103,13 @@ export default function StaffForm({
         newSkill: "",
         availability: { ...staffMember.availability },
         availabilityHours: staffMember.availabilityHours || {
-          monday: { start: "08:00", end: "17:00" },
-          tuesday: { start: "08:00", end: "17:00" },
-          wednesday: { start: "08:00", end: "17:00" },
-          thursday: { start: "08:00", end: "17:00" },
-          friday: { start: "08:00", end: "17:00" },
-          saturday: { start: "08:00", end: "17:00" },
-          sunday: { start: "08:00", end: "17:00" },
+          monday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          tuesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          wednesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          thursday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          friday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          saturday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          sunday: { start: settings.businessHours.start, end: settings.businessHours.end },
         },
       });
     }
@@ -373,7 +373,32 @@ export default function StaffForm({
           </div>
 
           <div className="space-y-4">
-            <Label>Availability</Label>
+            <div className="flex justify-between items-center">
+              <Label>Availability</Label>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  // Apply business hours to all days that are enabled
+                  const updatedHours = { ...formData.availabilityHours };
+                  Object.keys(formData.availability).forEach(day => {
+                    if (formData.availability[day as keyof typeof formData.availability]) {
+                      updatedHours[day as keyof typeof updatedHours] = {
+                        start: settings.businessHours.start,
+                        end: settings.businessHours.end
+                      };
+                    }
+                  });
+                  setFormData(prev => ({
+                    ...prev,
+                    availabilityHours: updatedHours
+                  }));
+                }}
+              >
+                Apply Business Hours
+              </Button>
+            </div>
             <div className="space-y-4">
               {days.map((day) => (
                 <div key={day.key} className="flex items-center space-x-4">
