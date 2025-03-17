@@ -16,6 +16,9 @@ import {
   JobType,
   BusinessHours,
   AppSettings,
+  JobTypeDefinition,
+  ScheduleConflict,
+  AutoScheduleOptions,
 } from "@/types";
 import {
   mockStaff,
@@ -30,12 +33,16 @@ import { detectScheduleConflicts, hasScheduleConflicts } from "@/lib/scheduling"
 interface AppContextType {
   // Jobs
   jobs: Job[];
-  addJob: (job: Omit<Job, "id" | "createdAt" | "updatedAt">) => void;
+  addJob: (job: Omit<Job, "id" | "createdAt" | "updatedAt">) => Job;
   updateJob: (job: Job) => void;
   deleteJob: (id: string) => void;
   getJobById: (id: string) => Job | undefined;
   filteredJobs: Job[];
   setJobFilters: (filters: JobFilters) => void;
+
+  // Job Types
+  jobTypes: JobTypeDefinition[];
+  updateJobTypes: (types: JobTypeDefinition[]) => void;
 
   // Staff
   staff: StaffMember[];
@@ -53,11 +60,11 @@ interface AppContextType {
 
   // Schedule
   schedule: ScheduleEvent[];
-  addScheduleEvent: (event: Omit<ScheduleEvent, "id">) => ScheduleEvent;
-  updateScheduleEvent: (event: ScheduleEvent) => void;
+  addScheduleEvent: (event: Omit<ScheduleEvent, "id">) => ScheduleEventResult;
+  updateScheduleEvent: (event: ScheduleEvent) => UpdateScheduleEventResult;
   deleteScheduleEvent: (id: string) => void;
   getScheduleForDate: (date: Date) => ScheduleEvent[];
-  autoScheduleJob: (jobId: string) => ScheduleEvent | null;
+  autoScheduleJob: (jobId: string, options?: AutoScheduleOptions) => ScheduleEventResult | null;
 
   // Feedback
   feedback: FeedbackItem[];
@@ -82,6 +89,19 @@ interface JobFilters {
   dateRange?: { start: Date | null; end: Date | null };
 }
 
+// Add a new type for the schedule event result
+export interface ScheduleEventResult {
+  event: ScheduleEvent;
+  conflicts: ScheduleConflict[];
+  hasErrors: boolean;
+}
+
+// Add a new type for the update schedule event result
+export interface UpdateScheduleEventResult {
+  conflicts: ScheduleConflict[];
+  hasErrors: boolean;
+}
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -89,9 +109,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
     try {
       const storedData = localStorage.getItem(key);
-      return storedData ? JSON.parse(storedData) : defaultValue;
+      if (!storedData) {
+        console.warn(`No data found for ${key} in localStorage, using default value:`, defaultValue);
+        return defaultValue;
+      }
+
+      try {
+        const parsedData = JSON.parse(storedData);
+        console.log(`Successfully loaded ${key} from localStorage:`, 
+          key === 'jobTypes' ? parsedData : `[${typeof parsedData}]`);
+        return parsedData;
+      } catch (parseError) {
+        console.error(`Error parsing ${key} from localStorage:`, parseError);
+        console.warn(`Resetting corrupted ${key} data to default value`);
+        localStorage.setItem(key, JSON.stringify(defaultValue));
+        return defaultValue;
+      }
     } catch (error) {
-      console.error(`Error loading ${key} from localStorage:`, error);
+      console.error(`Error accessing ${key} from localStorage:`, error);
       return defaultValue;
     }
   };
@@ -103,6 +138,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!hasInitialized) {
         localStorage.clear();
         localStorage.setItem("hasInitialized", "true");
+
+        // Force set default job types directly to localStorage to ensure they exist
+        localStorage.setItem("jobTypes", JSON.stringify(defaultJobTypes));
+        console.log("Initialized localStorage with default job types:", defaultJobTypes);
+      } else {
+        // Check if jobTypes exist in localStorage and recreate if missing
+        const storedJobTypes = localStorage.getItem("jobTypes");
+        if (!storedJobTypes) {
+          console.warn("Job types missing in localStorage, re-initializing...");
+          localStorage.setItem("jobTypes", JSON.stringify(defaultJobTypes));
+          // Force re-initialization of state
+          setJobTypes([...defaultJobTypes]);
+        }
       }
     } catch (error) {
       console.error("Error initializing localStorage:", error);
@@ -110,6 +158,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Default business hours: 8am to 5pm
+  // Default job types
+  const defaultJobTypes: JobTypeDefinition[] = [
+    { id: "embroidery", name: "Embroidery", description: "Machine embroidery services" },
+    { id: "screen_printing", name: "Screen Printing", description: "Traditional screen printing services" },
+    { id: "digital_printing", name: "Digital Printing", description: "Print for digital media" },
+    { id: "wide_format", name: "Wide Format", description: "Large format printing services" },
+    { id: "central_facility", name: "Central Facility", description: "Services at the central production facility" },
+  ];
+
   const defaultSettings: AppSettings = {
     businessHours: {
       start: "08:00",
@@ -120,6 +177,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // State for jobs, staff, schedule, settings
   const [settings, setSettings] = useState<AppSettings>(
     loadFromStorage("settings", defaultSettings),
+  );
+  const [jobTypes, setJobTypes] = useState<JobTypeDefinition[]>(
+    loadFromStorage("jobTypes", defaultJobTypes),
   );
   const [jobs, setJobs] = useState<Job[]>(loadFromStorage("jobs", mockJobs));
   const [staff, setStaff] = useState<StaffMember[]>(
@@ -192,11 +252,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Calculate dashboard metrics based on current data
   const calculateDashboardMetrics = () => {
-    // Ensure we're working with the latest data
-    const currentJobs = jobs;
-    const currentSchedule = schedule;
-    const currentStaff = staff;
-    const currentMachines = machines;
+    // Get upcoming deadlines (jobs due in the next 7 days)
+    const now = new Date();
+    const sevenDaysFromNow = addDays(now, 7);
+    
+    const upcomingDeadlines = jobs
+      .filter(
+        (job) =>
+          job.status !== "completed" &&
+          job.status !== "cancelled" &&
+          job.status !== "archived" &&
+          new Date(job.deadline) <= sevenDaysFromNow
+      )
+      .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+    
+    // Calculate capacity utilization (percentage of staff assigned to jobs)
+    const assignedStaff = new Set();
+    jobs.forEach((job) => {
+      if (job.assignedTo && job.status !== "completed" && job.status !== "cancelled" && job.status !== "archived") {
+        assignedStaff.add(job.assignedTo);
+      }
+    });
+    
+    const capacityUtilization = staff.length
+      ? (assignedStaff.size / staff.length) * 100
+      : 0;
+    
     // Calculate job status distribution
     const jobStatusDistribution: Record<JobStatus, number> = {
       pending: 0,
@@ -204,74 +285,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
       review: 0,
       completed: 0,
       cancelled: 0,
+      archived: 0
     };
-
-    currentJobs.forEach((job) => {
+    
+    jobs.forEach((job) => {
       jobStatusDistribution[job.status]++;
     });
-
-    // Calculate upcoming deadlines
-    const today = new Date();
-    const upcomingDeadlines = currentJobs
-      .filter((job) => {
-        const deadline = new Date(job.deadline);
-        const cutoffDate = addDays(today, 7);
-        return (
-          job.status !== "completed" &&
-          job.status !== "cancelled" &&
-          deadline <= cutoffDate
-        );
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.deadline).getTime() - new Date(b.deadline).getTime(),
-      );
-
-    // Calculate staff workload
+    
+    // Calculate staff workload (number of active jobs per staff member)
     const staffWorkload: Record<string, number> = {};
-    currentStaff.forEach((staffMember) => {
-      const assignedJobsCount = currentJobs.filter(
-        (job) => job.assignedTo === staffMember.id,
-      ).length;
-      staffWorkload[staffMember.id] = assignedJobsCount;
+    staff.forEach((member) => {
+      staffWorkload[member.id] = 0;
     });
-
-    // Calculate machine utilization
+    
+    jobs.forEach((job) => {
+      if (
+        job.assignedTo &&
+        job.status !== "completed" &&
+        job.status !== "cancelled" &&
+        job.status !== "archived"
+      ) {
+        staffWorkload[job.assignedTo] = (staffWorkload[job.assignedTo] || 0) + 1;
+      }
+    });
+    
+    // Calculate machine utilization if machines are available
     const machineUtilization: Record<string, number> = {};
-    currentMachines.forEach((machine) => {
-      const machineEvents = currentSchedule.filter(
-        (event) => event.machineId === machine.id,
-      );
-      const totalHours = machineEvents.reduce((total, event) => {
-        const start = new Date(event.startTime);
-        const end = new Date(event.endTime);
-        return total + (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-      }, 0);
-      const utilization = Math.min(
-        100,
-        (totalHours / (machine.hoursPerDay * 5)) * 100,
-      );
-      machineUtilization[machine.id] = Math.round(utilization);
-    });
-
-    // Calculate overall capacity utilization
-    const totalCapacity = currentStaff.length * 40; // 40 hours per week per staff
-    const totalScheduled = currentSchedule.reduce((total, event) => {
-      const start = new Date(event.startTime);
-      const end = new Date(event.endTime);
-      return total + (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    }, 0);
-    const capacityUtilization = Math.min(
-      100,
-      Math.round((totalScheduled / totalCapacity) * 100),
-    );
-
+    const currentMachines = machines;
+    
+    if (currentMachines.length > 0) {
+      currentMachines.forEach((machine) => {
+        machineUtilization[machine.id] = 0;
+      });
+      
+      // Count scheduled events for each machine
+      schedule.forEach((event) => {
+        if (event.machineId) {
+          machineUtilization[event.machineId] = (machineUtilization[event.machineId] || 0) + 1;
+        }
+      });
+    }
+    
     return {
       upcomingDeadlines,
       capacityUtilization,
       jobStatusDistribution,
       staffWorkload,
-      machineUtilization,
+      machineUtilization
     };
   };
 
@@ -337,6 +397,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 300);
     return () => clearTimeout(timeoutId);
   }, [settings]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      saveToStorage("jobTypes", jobTypes);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [jobTypes]);
 
   // Job functions
   const addJob = (job: Omit<Job, "id" | "createdAt" | "updatedAt">): Job => {
@@ -461,14 +528,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // If there are conflicts with "error" severity, log them
     const hasErrors = conflicts.some(conflict => conflict.severity === "error");
-    if (hasErrors) {
+    if (conflicts.length > 0) {
       console.warn("Scheduling conflicts detected:", conflicts);
-      // Note: We still allow the event to be added, but we log the conflicts
-      // In a real application, you might want to make this configurable
+      
+      // Return conflicts along with the event so UI can handle them appropriately
+      return { 
+        event: newEvent, 
+        conflicts, 
+        hasErrors
+      };
     }
     
+    // No conflicts or only warnings, add the event
     setSchedule([...schedule, newEvent]);
-    return newEvent;
+    return { 
+      event: newEvent, 
+      conflicts: [],
+      hasErrors: false
+    };
   };
 
   const updateScheduleEvent = (event: ScheduleEvent) => {
@@ -477,12 +554,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // If there are conflicts with "error" severity, log them
     const hasErrors = conflicts.some(conflict => conflict.severity === "error");
-    if (hasErrors) {
+    if (conflicts.length > 0) {
       console.warn("Scheduling conflicts detected during update:", conflicts);
-      // Note: We still allow the event to be updated, but we log the conflicts
+      
+      // Return conflicts so UI can handle them
+      return {
+        conflicts,
+        hasErrors
+      };
     }
     
+    // No conflicts or only warnings, update the event
     setSchedule(schedule.map((e) => (e.id === event.id ? event : e)));
+    return {
+      conflicts: [],
+      hasErrors: false
+    };
   };
 
   const deleteScheduleEvent = (id: string) => {
@@ -498,7 +585,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // Auto-schedule a job based on staff availability and job requirements
-  const autoScheduleJob = (jobId: string): ScheduleEvent | null => {
+  const autoScheduleJob = (jobId: string, options?: AutoScheduleOptions): ScheduleEventResult | null => {
     const job = getJobById(jobId);
     if (!job) return null;
 
@@ -544,7 +631,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSchedule([...schedule, createdEvent]);
 
     // Return the created event
-    return createdEvent;
+    return { 
+      event: createdEvent, 
+      conflicts: [],
+      hasErrors: false
+    };
   };
 
   // Find the next available time slot for a staff member
@@ -739,6 +830,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  // Update job types
+  const updateJobTypes = (types: JobTypeDefinition[]) => {
+    setJobTypes(types);
+  };
+
   // Apply default business hours to a staff member's availability
   const applyDefaultAvailabilityToStaff = (staffId?: string) => {
     const { start, end } = settings.businessHours;
@@ -794,6 +890,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getJobById,
     filteredJobs,
     setJobFilters,
+
+    // Job Types
+    jobTypes,
+    updateJobTypes,
 
     // Staff
     staff,

@@ -5,16 +5,12 @@ import { addDays, format, subDays } from "date-fns";
 export const mockStaff: StaffMember[] = [
   {
     id: "staff-1",
-    name: "Isaac",
+    name: "John Smith",
     role: "Production Manager",
-    email: "isaac@printshop.com",
-    phone: "555-123-4567",
-    skills: [
-      "Management",
-      "Digital Printing",
-      "Screen Printing",
-      "Production Planning",
-    ],
+    email: "john@example.com",
+    phone: "555-1234",
+    skills: ["printing", "design", "management"],
+    jobTypeCapabilities: ["print", "design", "large_format"],
     availability: {
       monday: true,
       tuesday: true,
@@ -28,7 +24,7 @@ export const mockStaff: StaffMember[] = [
     performanceMetrics: {
       completionRate: 95,
       onTimeRate: 92,
-      qualityScore: 98,
+      qualityScore: 4.8,
     },
     availabilityHours: {
       monday: { start: "08:00", end: "17:00" },
@@ -40,16 +36,12 @@ export const mockStaff: StaffMember[] = [
   },
   {
     id: "staff-2",
-    name: "Aaron",
-    role: "Production Specialist",
-    email: "aaron@printshop.com",
-    phone: "555-234-5678",
-    skills: [
-      "Machine Operation",
-      "Quality Control",
-      "Digital Printing",
-      "Screen Printing",
-    ],
+    name: "Jane Doe",
+    role: "Graphic Designer",
+    email: "jane@example.com",
+    phone: "555-5678",
+    skills: ["design", "illustration", "typography"],
+    jobTypeCapabilities: ["design", "branding"],
     availability: {
       monday: true,
       tuesday: true,
@@ -61,9 +53,9 @@ export const mockStaff: StaffMember[] = [
     },
     assignedJobs: [],
     performanceMetrics: {
-      completionRate: 90,
-      onTimeRate: 88,
-      qualityScore: 95,
+      completionRate: 98,
+      onTimeRate: 95,
+      qualityScore: 4.9,
     },
     availabilityHours: {
       monday: { start: "09:00", end: "18:00" },
@@ -75,11 +67,12 @@ export const mockStaff: StaffMember[] = [
   },
   {
     id: "staff-3",
-    name: "Mike",
-    role: "Sales Manager",
-    email: "mike@printshop.com",
-    phone: "555-345-6789",
-    skills: ["Client Relations", "Sales", "Marketing", "Project Management"],
+    name: "Mike Johnson",
+    role: "Print Operator",
+    email: "mike@example.com",
+    phone: "555-9012",
+    skills: ["printing", "binding", "finishing"],
+    jobTypeCapabilities: ["print", "finishing"],
     availability: {
       monday: true,
       tuesday: true,
@@ -93,28 +86,24 @@ export const mockStaff: StaffMember[] = [
     performanceMetrics: {
       completionRate: 92,
       onTimeRate: 90,
-      qualityScore: 88,
+      qualityScore: 4.5,
     },
     availabilityHours: {
-      monday: { start: "08:00", end: "17:00" },
-      tuesday: { start: "08:00", end: "17:00" },
-      wednesday: { start: "08:00", end: "17:00" },
-      thursday: { start: "08:00", end: "17:00" },
-      friday: { start: "08:00", end: "17:00" },
+      monday: { start: "07:00", end: "16:00" },
+      tuesday: { start: "07:00", end: "16:00" },
+      wednesday: { start: "07:00", end: "16:00" },
+      thursday: { start: "07:00", end: "16:00" },
+      friday: { start: "07:00", end: "16:00" },
     },
   },
   {
     id: "staff-4",
-    name: "Jordan",
-    role: "Sales Representative",
-    email: "jordan@printshop.com",
-    phone: "555-456-7890",
-    skills: [
-      "Client Relations",
-      "Order Processing",
-      "Sales",
-      "Customer Service",
-    ],
+    name: "Sarah Williams",
+    role: "Customer Service",
+    email: "sarah@example.com",
+    phone: "555-3456",
+    skills: ["customer service", "sales", "order processing"],
+    jobTypeCapabilities: ["customer_service", "sales"],
     availability: {
       monday: true,
       tuesday: true,
@@ -126,16 +115,16 @@ export const mockStaff: StaffMember[] = [
     },
     assignedJobs: [],
     performanceMetrics: {
-      completionRate: 96,
-      onTimeRate: 94,
-      qualityScore: 97,
+      completionRate: 97,
+      onTimeRate: 98,
+      qualityScore: 4.7,
     },
     availabilityHours: {
-      monday: { start: "09:00", end: "18:00" },
-      tuesday: { start: "09:00", end: "18:00" },
-      wednesday: { start: "09:00", end: "18:00" },
-      thursday: { start: "09:00", end: "18:00" },
-      friday: { start: "09:00", end: "18:00" },
+      monday: { start: "08:30", end: "17:30" },
+      tuesday: { start: "08:30", end: "17:30" },
+      wednesday: { start: "08:30", end: "17:30" },
+      thursday: { start: "08:30", end: "17:30" },
+      friday: { start: "08:30", end: "17:30" },
     },
   },
 ];
@@ -149,15 +138,16 @@ export const mockSchedule: ScheduleEvent[] = [];
 export function generateDashboardMetrics() {
   return {
     upcomingDeadlines: [],
-    capacityUtilization: 0,
+    capacityUtilization: 65,
     jobStatusDistribution: {
-      pending: 0,
-      in_progress: 0,
-      review: 0,
-      completed: 0,
-      cancelled: 0,
+      pending: 12,
+      in_progress: 8,
+      review: 4,
+      completed: 20,
+      cancelled: 2,
+      archived: 5
     },
     staffWorkload: {},
-    machineUtilization: {},
+    machineUtilization: {}
   };
 }

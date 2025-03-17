@@ -32,7 +32,7 @@ import ScheduleSuggestions from "./ScheduleSuggestions";
 
 export default function ScheduleJobForm() {
   const navigate = useNavigate();
-  const { jobs, staff, schedule, settings, addScheduleEvent, getJobById } = useAppContext();
+  const { jobs, staff, schedule, settings, addScheduleEvent, getJobById, jobTypes } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [formData, setFormData] = useState<{
@@ -106,7 +106,7 @@ export default function ScheduleJobForm() {
     if (name === "staffId" && value && value !== "unassigned") {
       const selectedStaff = staff.find(member => member.id === value);
       const selectedDate = new Date(formData.startDate);
-      const dayOfWeek = new Intl.DateTimeFormat("en-US", { weekday: "lowercase" }).format(selectedDate);
+      const dayOfWeek = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(selectedDate).toLowerCase();
       
       if (selectedStaff && !selectedStaff.availability[dayOfWeek as keyof typeof selectedStaff.availability]) {
         toast({
@@ -114,6 +114,11 @@ export default function ScheduleJobForm() {
           description: `${selectedStaff.name} is not available on ${dayOfWeek}s.`,
           variant: "destructive",
         });
+      }
+      
+      // Regenerate suggestions when staff changes
+      if (formData.jobId) {
+        generateSuggestions(formData.jobId);
       }
     }
   };
@@ -135,7 +140,7 @@ export default function ScheduleJobForm() {
 
     // Validate that end time is after start time
     const startDateTime = new Date(`${formData.startDate}T${formData.startTime}`);
-    const endDateTime = new Date(`${formData.endDate}T${formData.endTime}`);
+    const endDateTime = new Date(`${formData.endDate}T${formData.endTime}:00`);
     
     if (endDateTime <= startDateTime) {
       errors.endTime = "End time must be after start time";
@@ -169,39 +174,72 @@ export default function ScheduleJobForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
+    
+    if (!formData.jobId || !formData.staffId || !formData.startDate || !formData.startTime || !formData.endDate || !formData.endTime) {
       toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
+        title: "Missing Information",
+        description: "Please complete all required fields",
+        variant: "destructive"
       });
       return;
     }
-
-    // Check for conflicts if not already checked
-    if (conflicts.length === 0 && !showIgnoreConflictsButton) {
-      const hasConflicts = checkForConflicts();
-      
-      if (hasConflicts) {
-        setShowIgnoreConflictsButton(true);
-        return;
-      }
-    }
-
-    // Combine date and time into ISO strings
-    const startTime = `${formData.startDate}T${formData.startTime}:00`;
-    const endTime = `${formData.endDate}T${formData.endTime}:00`;
-
-    try {
-      const event = addScheduleEvent({
-        jobId: formData.jobId,
-        staffId: formData.staffId === "unassigned" ? undefined : formData.staffId,
-        startTime,
-        endTime,
-        notes: formData.notes || undefined,
+    
+    const job = getJobById(formData.jobId);
+    if (!job) {
+      toast({
+        title: "Error",
+        description: "Job not found",
+        variant: "destructive"
       });
-
+      return;
+    }
+    
+    try {
+      // Format times for API
+      const startDateTime = new Date(formData.startDate);
+      const [startHour, startMinute] = formData.startTime.split(':').map(Number);
+      startDateTime.setHours(startHour, startMinute, 0, 0);
+      
+      const endDateTime = new Date(formData.endDate);
+      const [endHour, endMinute] = formData.endTime.split(':').map(Number);
+      endDateTime.setHours(endHour, endMinute, 0, 0);
+      
+      // Create event object
+      const event: Omit<ScheduleEvent, "id"> = {
+        jobId: job.id,
+        staffId: formData.staffId,
+        startTime: startDateTime.toISOString(),
+        endTime: endDateTime.toISOString(),
+        notes: formData.notes || "",
+      };
+      
+      // Schedule the job
+      const result = addScheduleEvent(event);
+      
+      // Handle the response which includes both the event and conflicts
+      if (result && 'conflicts' in result && result.conflicts.length > 0) {
+        // If there are conflicts, show them to the user
+        const errorConflicts = result.conflicts.filter(c => c.severity === "error");
+        const warningConflicts = result.conflicts.filter(c => c.severity === "warning");
+        
+        if (errorConflicts.length > 0) {
+          // Show error for critical conflicts
+          toast({
+            title: "Scheduling Conflicts Detected",
+            description: errorConflicts.map(c => c.message).join(", "),
+            variant: "destructive"
+          });
+          return; // Don't proceed if there are error conflicts
+        } else if (warningConflicts.length > 0) {
+          // Show warning for non-critical conflicts but allow scheduling
+          toast({
+            title: "Scheduling Warnings",
+            description: warningConflicts.map(c => c.message).join(", "),
+            variant: "default"
+          });
+        }
+      }
+      
       toast({
         title: "Success",
         description: "Job scheduled successfully",
@@ -240,9 +278,30 @@ export default function ScheduleJobForm() {
     
     // Use the simpler scheduling utility
     import("@/lib/scheduling/autoScheduleUtils").then(module => {
+      // Filter staff based on selection if a staff member is selected
+      let staffToCheck;
+      
+      if (formData.staffId && formData.staffId !== "unassigned") {
+        staffToCheck = staff.filter(s => s.id === formData.staffId);
+      } else {
+        // Filter by staff members who can handle this job type
+        staffToCheck = staff.filter(s => {
+          // If staff has no job type capabilities or empty array, assume they can handle all job types (for backward compatibility)
+          if (!s.jobTypeCapabilities || s.jobTypeCapabilities.length === 0) {
+            return true;
+          }
+          // Check if the staff member can handle this job type
+          return s.jobTypeCapabilities.includes(job.jobType);
+        });
+      }
+      
+      // Log how many staff members are qualified for this job
+      console.log(`Found ${staffToCheck.length} staff members qualified for this job type`);
+      staffToCheck.forEach(s => console.log(` - ${s.name}`));
+        
       const suggestions = module.findScheduleSuggestions(
         job,
-        staff,
+        staffToCheck,
         schedule,
         5, // max suggestions
         10 // days to check
@@ -298,7 +357,7 @@ export default function ScheduleJobForm() {
     }
 
     const selectedDate = new Date(formData.startDate);
-    const dayOfWeek = new Intl.DateTimeFormat("en-US", { weekday: "lowercase" }).format(selectedDate);
+    const dayOfWeek = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(selectedDate).toLowerCase();
     
     // Get selected staff member
     const selectedStaff = staff.find(member => member.id === formData.staffId);
@@ -393,14 +452,81 @@ export default function ScheduleJobForm() {
         const startDateTime = new Date(`${formData.startDate}T${formData.startTime}`);
         const endDateTime = addMinutes(startDateTime, job.estimatedHours * 60);
         
+        // Check if the end time exceeds business hours
+        let adjustedEndDate = format(endDateTime, "yyyy-MM-dd");
+        let adjustedEndTime = format(endDateTime, "HH:mm");
+        
+        // If staff is selected, check their availability
+        if (formData.staffId && formData.staffId !== "unassigned") {
+          const selectedStaff = staff.find(member => member.id === formData.staffId);
+          const startDayOfWeek = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(startDateTime).toLowerCase();
+          
+          // Check if staff has availability on this day
+          if (selectedStaff && selectedStaff.availability[startDayOfWeek as keyof typeof selectedStaff.availability]) {
+            // Get availability hours for this day
+            const availabilityHours = selectedStaff.availabilityHours?.[startDayOfWeek as keyof typeof selectedStaff.availabilityHours];
+            
+            // Use business hours as default if not specified
+            const endHourStr = availabilityHours ? availabilityHours.end : settings.businessHours.end;
+            const [endHour, endMin] = endHourStr.split(":").map(Number);
+            
+            // Calculate end of day availability
+            const availabilityEnd = new Date(startDateTime);
+            availabilityEnd.setHours(endHour, endMin, 0, 0);
+            
+            // If job would end after availability hours, adjust to the next available day
+            if (endDateTime > availabilityEnd) {
+              console.log("Job extends beyond availability hours, adjusting schedule");
+              
+              // Calculate remaining hours
+              const hoursCompleted = (availabilityEnd.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
+              const hoursRemaining = job.estimatedHours - hoursCompleted;
+              
+              if (hoursRemaining > 0) {
+                // Set end time to end of availability for first day
+                adjustedEndTime = endHourStr;
+                
+                // Show a toast to inform the user
+                toast({
+                  title: "Job spans multiple days",
+                  description: `This job will take ${hoursRemaining.toFixed(1)} more hours on the next available day.`,
+                });
+              }
+            }
+          }
+        } else {
+          // If no staff selected, use default business hours
+          const { end } = settings.businessHours;
+          const [endHour, endMin] = end.split(":").map(Number);
+          
+          // Calculate end of business day
+          const businessEnd = new Date(startDateTime);
+          businessEnd.setHours(endHour, endMin, 0, 0);
+          
+          // If job would end after business hours, adjust to end of business day
+          if (endDateTime > businessEnd) {
+            adjustedEndTime = end;
+            
+            const hoursCompleted = (businessEnd.getTime() - startDateTime.getTime()) / (1000 * 60 * 60);
+            const hoursRemaining = job.estimatedHours - hoursCompleted;
+            
+            if (hoursRemaining > 0) {
+              toast({
+                title: "Job spans multiple days",
+                description: `This job will take ${hoursRemaining.toFixed(1)} more hours on the next business day.`,
+              });
+            }
+          }
+        }
+        
         setFormData(prev => ({
           ...prev,
-          endDate: format(endDateTime, "yyyy-MM-dd"),
-          endTime: format(endDateTime, "HH:mm"),
+          endDate: adjustedEndDate,
+          endTime: adjustedEndTime,
         }));
       }
     }
-  }, [formData.jobId, formData.startDate, formData.startTime, getJobById]);
+  }, [formData.jobId, formData.startDate, formData.startTime, formData.staffId, getJobById, staff, settings.businessHours]);
 
   return (
     <div className="w-full h-full bg-gray-50">
@@ -475,7 +601,9 @@ export default function ScheduleJobForm() {
                       {(() => {
                         const job = getJobById(formData.jobId);
                         if (job) {
-                          return `Estimated hours: ${job.estimatedHours}`;
+                          const jobTypeObj = job.jobType ? jobTypes.find(jt => jt.id === job.jobType) : null;
+                          const jobTypeName = jobTypeObj ? jobTypeObj.name : job.jobType.replace('_', ' ');
+                          return `Job Type: ${jobTypeName}, Estimated hours: ${job.estimatedHours}`;
                         }
                         return null;
                       })()}
@@ -494,11 +622,35 @@ export default function ScheduleJobForm() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {staff.map((member) => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.name}
-                        </SelectItem>
-                      ))}
+                      {formData.jobId ? (
+                        (() => {
+                          const job = getJobById(formData.jobId);
+                          const jobType = job?.jobType;
+                          
+                          // Filter staff by capability if a job is selected
+                          const filteredStaff = staff.filter(member => {
+                            // If staff has no job type capabilities or empty array, assume they can handle all jobs (for backward compatibility)
+                            if (!member.jobTypeCapabilities || member.jobTypeCapabilities.length === 0) {
+                              return true;
+                            }
+                            // If job type is available, check if staff can handle it
+                            return jobType ? member.jobTypeCapabilities.includes(jobType) : true;
+                          });
+                          
+                          return filteredStaff.map((member) => (
+                            <SelectItem key={member.id} value={member.id}>
+                              {member.name}
+                            </SelectItem>
+                          ));
+                        })()
+                      ) : (
+                        // If no job is selected, show all staff
+                        staff.map((member) => (
+                          <SelectItem key={member.id} value={member.id}>
+                            {member.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -614,16 +766,11 @@ export default function ScheduleJobForm() {
                         <SelectValue placeholder="End time" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: 19 * 2 }, (_, i) => {
-                          const hour = Math.floor(i / 2) + 8;
-                          const minute = i % 2 === 0 ? "00" : "30";
-                          const time = `${hour.toString().padStart(2, "0")}:${minute}`;
-                          return (
+                        {generateTimeOptions(8, 23, false).map((time) => (
                             <SelectItem key={time} value={time}>
                               {formatTime12Hour(time)}
                             </SelectItem>
-                          );
-                        })}
+                          ))}
                       </SelectContent>
                     </Select>
                     {validationErrors.endTime && (
@@ -671,7 +818,7 @@ export default function ScheduleJobForm() {
                     </Button>
                   )}
                   <Button 
-                    type="button" 
+                    type="submit" 
                     onClick={(e) => {
                       e.preventDefault();
                       if (conflicts.length === 0 || showIgnoreConflictsButton) {
@@ -728,7 +875,9 @@ export default function ScheduleJobForm() {
                       {(() => {
                         const job = getJobById(formData.jobId);
                         if (job) {
-                          return `Job Type: ${job.jobType.replace('_', ' ')}, Estimated hours: ${job.estimatedHours}`;
+                          const jobTypeObj = job.jobType ? jobTypes.find(jt => jt.id === job.jobType) : null;
+                          const jobTypeName = jobTypeObj ? jobTypeObj.name : job.jobType.replace('_', ' ');
+                          return `Job Type: ${jobTypeName}, Estimated hours: ${job.estimatedHours}`;
                         }
                         return null;
                       })()}

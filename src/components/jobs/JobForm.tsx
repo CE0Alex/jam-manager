@@ -28,11 +28,27 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 interface JobFormProps {
   job?: Job;
   isEditing?: boolean;
+  prefilledData?: {
+    title?: string;
+    client?: string;
+    description?: string;
+    deadline?: string;
+    priority?: JobPriority;
+    estimatedHours?: number;
+    notes?: string;
+    fileUrl?: string;
+    jobType?: JobType;
+  };
+  pdfFile?: File | null;
+  onJobCreated?: () => void;
 }
 
 export default function JobForm({
   job: propJob,
   isEditing: propIsEditing = false,
+  prefilledData,
+  pdfFile,
+  onJobCreated,
 }: JobFormProps) {
   const { id } = useParams();
   const { getJobById } = useAppContext();
@@ -50,23 +66,24 @@ export default function JobForm({
     status: JobStatus;
     deadline: string;
     priority: JobPriority;
+    jobType: JobType;
     fileUrl?: string;
     estimatedHours: number;
     notes?: string;
   }>({
-    title: "",
-    client: "",
-    description: "",
+    title: prefilledData?.title || "",
+    client: prefilledData?.client || "",
+    description: prefilledData?.description || "",
     status: "pending",
-    deadline: format(
+    deadline: prefilledData?.deadline || format(
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       "yyyy-MM-dd",
     ),
-    priority: "medium",
-    jobType: "digital_printing",
-    fileUrl: "",
-    estimatedHours: 1,
-    notes: "",
+    priority: prefilledData?.priority || "medium",
+    jobType: prefilledData?.jobType || "digital_printing",
+    fileUrl: prefilledData?.fileUrl || "",
+    estimatedHours: prefilledData?.estimatedHours || 1,
+    notes: prefilledData?.notes || "",
   });
 
   const [validationErrors, setValidationErrors] = useState<{
@@ -161,7 +178,25 @@ export default function JobForm({
     try {
       // Handle file URL - if it's a blob URL, we need to upload the file to storage
       let permanentFileUrl = formData.fileUrl;
-      if (formData.fileUrl && formData.fileUrl.startsWith("blob:")) {
+      
+      // If we have an uploaded PDF file from PDF parsing
+      if (pdfFile) {
+        try {
+          const { uploadFile } = await import("@/lib/storage");
+          const uploadedUrl = await uploadFile(pdfFile);
+          
+          if (uploadedUrl) {
+            console.log("Successfully uploaded PDF to permanent storage");
+            permanentFileUrl = uploadedUrl;
+          } else {
+            console.warn("Failed to upload PDF to permanent storage");
+          }
+        } catch (uploadError) {
+          console.error("Error uploading PDF file:", uploadError);
+        }
+      }
+      // Handle blob URLs from other sources
+      else if (formData.fileUrl && formData.fileUrl.startsWith("blob:")) {
         // This is a temporary blob URL, we need to fetch the file and upload it
         try {
           const { uploadFile } = await import("@/lib/storage");
@@ -199,39 +234,52 @@ export default function JobForm({
           }
         } catch (uploadError) {
           console.error("Error uploading file:", uploadError);
-          // Continue with the blob URL if upload fails
           toast({
-            title: "File Storage Notice",
-            description:
-              "Using temporary storage for the file. It may not be available after the session ends.",
-            variant: "warning",
+            title: "Upload Error",
+            description: "Failed to upload the file. The job will be created without the file attachment.",
+            variant: "destructive",
           });
         }
       }
 
       if (isEditing && job) {
-        updateJob({
+        // Update existing job
+        const updatedJob = {
           ...job,
           ...formData,
-          fileUrl: permanentFileUrl,
-          estimatedHours: Number(formData.estimatedHours),
-        });
+          fileUrl: permanentFileUrl || job.fileUrl,
+        };
+        updateJob(updatedJob);
+
         toast({
           title: "Success",
           description: "Job updated successfully",
         });
         navigate(`/jobs/${job.id}`);
       } else {
-        addJob({
+        // Create new job
+        const newJob = {
           ...formData,
+          id: `job-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           fileUrl: permanentFileUrl,
+          jobType: formData.jobType,
           estimatedHours: Number(formData.estimatedHours),
-        });
+        };
+
+        addJob(newJob);
+
         toast({
           title: "Success",
           description: "Job created successfully",
         });
-        navigate("/schedule");
+        
+        if (onJobCreated) {
+          onJobCreated();
+        } else {
+          navigate(`/jobs/${newJob.id}`);
+        }
       }
     } catch (error) {
       console.error("Error submitting form:", error);
@@ -244,273 +292,266 @@ export default function JobForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
-      <Card>
-        <CardHeader>
-          <CardTitle>{isEditing ? "Edit Job" : "Create New Job"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {Object.keys(validationErrors).length > 0 && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Please correct the errors below before submitting.
-              </AlertDescription>
-            </Alert>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="max-h-[70vh] overflow-y-auto pr-2">
+        {Object.keys(validationErrors).length > 0 && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Please correct the errors below before submitting.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label
+              htmlFor="title"
+              className={validationErrors.title ? "text-destructive" : ""}
+            >
+              Invoice Number *
+            </Label>
+            <Input
+              id="title"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              className={validationErrors.title ? "border-destructive" : ""}
+              aria-invalid={!!validationErrors.title}
+            />
+            {validationErrors.title && (
+              <p className="text-sm text-destructive">
+                {validationErrors.title}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label
+              htmlFor="client"
+              className={validationErrors.client ? "text-destructive" : ""}
+            >
+              Client Name *
+            </Label>
+            <Input
+              id="client"
+              name="client"
+              value={formData.client}
+              onChange={handleChange}
+              className={validationErrors.client ? "border-destructive" : ""}
+              aria-invalid={!!validationErrors.client}
+            />
+            {validationErrors.client && (
+              <p className="text-sm text-destructive">
+                {validationErrors.client}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label
+            htmlFor="description"
+            className={validationErrors.description ? "text-destructive" : ""}
+          >
+            Description *
+          </Label>
+          <Textarea
+            id="description"
+            name="description"
+            value={formData.description}
+            onChange={handleChange}
+            rows={3}
+            className={
+              validationErrors.description ? "border-destructive" : ""
+            }
+            aria-invalid={!!validationErrors.description}
+          />
+          {validationErrors.description && (
+            <p className="text-sm text-destructive">
+              {validationErrors.description}
+            </p>
           )}
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label
-                htmlFor="title"
-                className={validationErrors.title ? "text-destructive" : ""}
-              >
-                Invoice Number *
-              </Label>
-              <Input
-                id="title"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                className={validationErrors.title ? "border-destructive" : ""}
-                aria-invalid={!!validationErrors.title}
-              />
-              {validationErrors.title && (
-                <p className="text-sm text-destructive">
-                  {validationErrors.title}
-                </p>
-              )}
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="status">Status</Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => handleSelectChange("status", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="review">In Review</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-            <div className="space-y-2">
-              <Label
-                htmlFor="client"
-                className={validationErrors.client ? "text-destructive" : ""}
-              >
-                Client Name *
-              </Label>
-              <Input
-                id="client"
-                name="client"
-                value={formData.client}
-                onChange={handleChange}
-                className={validationErrors.client ? "border-destructive" : ""}
-                aria-invalid={!!validationErrors.client}
-              />
-              {validationErrors.client && (
-                <p className="text-sm text-destructive">
-                  {validationErrors.client}
-                </p>
-              )}
+          <div className="space-y-2">
+            <Label htmlFor="priority">Priority</Label>
+            <Select
+              value={formData.priority}
+              onValueChange={(value) =>
+                handleSelectChange("priority", value as JobPriority)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="jobType">Job Type</Label>
+            <Select
+              value={formData.jobType}
+              onValueChange={(value) =>
+                handleSelectChange("jobType", value as JobType)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select job type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="embroidery">Embroidery</SelectItem>
+                <SelectItem value="screen_printing">
+                  Screen Printing
+                </SelectItem>
+                <SelectItem value="digital_printing">
+                  Digital Printing
+                </SelectItem>
+                <SelectItem value="wide_format">Wide Format</SelectItem>
+                <SelectItem value="central_facility">
+                  Central Facility
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label
+              htmlFor="deadline"
+              className={validationErrors.deadline ? "text-destructive" : ""}
+            >
+              Deadline *
+            </Label>
+            <Input
+              id="deadline"
+              name="deadline"
+              type="date"
+              value={formData.deadline}
+              onChange={handleChange}
+              className={
+                validationErrors.deadline ? "border-destructive" : ""
+              }
+              aria-invalid={!!validationErrors.deadline}
+            />
+            {validationErrors.deadline && (
+              <p className="text-sm text-destructive">
+                {validationErrors.deadline}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="assignedTo">Assigned To</Label>
+            <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
+              Jobs will be assigned to staff during scheduling
             </div>
           </div>
 
           <div className="space-y-2">
             <Label
-              htmlFor="description"
-              className={validationErrors.description ? "text-destructive" : ""}
-            >
-              Description *
-            </Label>
-            <Textarea
-              id="description"
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows={3}
+              htmlFor="estimatedHours"
               className={
-                validationErrors.description ? "border-destructive" : ""
+                validationErrors.estimatedHours ? "text-destructive" : ""
               }
-              aria-invalid={!!validationErrors.description}
-            />
-            {validationErrors.description && (
-              <p className="text-sm text-destructive">
-                {validationErrors.description}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => handleSelectChange("status", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="review">In Review</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
-              <Select
-                value={formData.priority}
-                onValueChange={(value) =>
-                  handleSelectChange("priority", value as JobPriority)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="urgent">Urgent</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="jobType">Job Type</Label>
-              <Select
-                value={formData.jobType}
-                onValueChange={(value) =>
-                  handleSelectChange("jobType", value as JobType)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select job type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="embroidery">Embroidery</SelectItem>
-                  <SelectItem value="screen_printing">
-                    Screen Printing
-                  </SelectItem>
-                  <SelectItem value="digital_printing">
-                    Digital Printing
-                  </SelectItem>
-                  <SelectItem value="wide_format">Wide Format</SelectItem>
-                  <SelectItem value="central_facility">
-                    Central Facility
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label
-                htmlFor="deadline"
-                className={validationErrors.deadline ? "text-destructive" : ""}
-              >
-                Deadline *
-              </Label>
-              <Input
-                id="deadline"
-                name="deadline"
-                type="date"
-                value={formData.deadline}
-                onChange={handleChange}
-                className={
-                  validationErrors.deadline ? "border-destructive" : ""
-                }
-                aria-invalid={!!validationErrors.deadline}
-              />
-              {validationErrors.deadline && (
-                <p className="text-sm text-destructive">
-                  {validationErrors.deadline}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="assignedTo">Assigned To</Label>
-              <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-                Jobs will be assigned to staff during scheduling
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label
-                htmlFor="estimatedHours"
-                className={
-                  validationErrors.estimatedHours ? "text-destructive" : ""
-                }
-              >
-                Estimated Hours *
-              </Label>
-              <Input
-                id="estimatedHours"
-                name="estimatedHours"
-                type="number"
-                min="0.5"
-                step="0.5"
-                value={formData.estimatedHours}
-                onChange={handleChange}
-                className={
-                  validationErrors.estimatedHours ? "border-destructive" : ""
-                }
-                aria-invalid={!!validationErrors.estimatedHours}
-              />
-              {validationErrors.estimatedHours && (
-                <p className="text-sm text-destructive">
-                  {validationErrors.estimatedHours}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="fileUrl">Job Ticket File URL</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="fileUrl"
-                name="fileUrl"
-                value={formData.fileUrl}
-                onChange={handleChange}
-                placeholder="https://example.com/files/job-file.pdf"
-              />
-              {formData.fileUrl && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => window.open(formData.fileUrl, "_blank")}
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-            {formData.fileUrl && formData.fileUrl.startsWith("blob:") && (
-              <p className="text-xs text-amber-600 mt-1">
-                Note: This file is stored temporarily. In a production
-                environment, files would be stored permanently in cloud storage.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              value={formData.notes}
+            >
+              Estimated Hours *
+            </Label>
+            <Input
+              id="estimatedHours"
+              name="estimatedHours"
+              type="number"
+              min="0.5"
+              step="0.5"
+              value={formData.estimatedHours}
               onChange={handleChange}
-              rows={3}
-              placeholder="Additional information about the job"
+              className={
+                validationErrors.estimatedHours ? "border-destructive" : ""
+              }
+              aria-invalid={!!validationErrors.estimatedHours}
             />
+            {validationErrors.estimatedHours && (
+              <p className="text-sm text-destructive">
+                {validationErrors.estimatedHours}
+              </p>
+            )}
           </div>
-        </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>
-            Cancel
-          </Button>
-          <Button type="submit">
-            {isEditing ? "Update Job" : "Create Job"}
-          </Button>
-        </CardFooter>
-      </Card>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="fileUrl">Job Ticket File URL</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="fileUrl"
+              name="fileUrl"
+              value={formData.fileUrl}
+              onChange={handleChange}
+              placeholder="https://example.com/files/job-file.pdf"
+            />
+            {formData.fileUrl && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => window.open(formData.fileUrl, "_blank")}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          {formData.fileUrl && formData.fileUrl.startsWith("blob:") && (
+            <p className="text-xs text-amber-600 mt-1">
+              Note: This file is stored temporarily. In a production
+              environment, files would be stored permanently in cloud storage.
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="notes">Notes</Label>
+          <Textarea
+            id="notes"
+            name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            rows={3}
+            placeholder="Additional information about the job"
+          />
+        </div>
+      </div>
+      
+      <div className="flex justify-end mt-4">
+        <Button type="submit">
+          {isEditing ? "Update Job" : "Create Job"}
+        </Button>
+      </div>
     </form>
   );
 }

@@ -14,7 +14,7 @@ if (process.env.TEMPO === "true") {
 export default defineConfig({
   base: "/", // Changed from './' to '/' for proper deployment path resolution
   optimizeDeps: {
-    entries: ["src/main.tsx", "src/tempobook/**/*"],
+    entries: ["src/main", "src/tempobook/**/*"],
     include: [
       "react",
       "react-dom",

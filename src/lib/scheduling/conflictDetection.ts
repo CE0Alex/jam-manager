@@ -50,9 +50,8 @@ export function detectScheduleConflicts(
   
   // Check staff availability
   if (staffMember) {
-    const dayOfWeek = new Intl.DateTimeFormat("en-US", { weekday: "lowercase" })
-      .format(newStart);
-    
+  const dayOfWeek = new Date(newStart).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+  
     // Check if staff is available on this day
     if (!staffMember.availability[dayOfWeek as keyof typeof staffMember.availability]) {
       conflicts.push({
@@ -206,8 +205,7 @@ export function getAvailableTimeSlots(
   if (!staffMember) return [];
   
   // Get day of week for availability check
-  const dayOfWeek = new Intl.DateTimeFormat("en-US", { weekday: "lowercase" })
-    .format(date);
+  const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
   
   // Check if staff is available on this day
   if (!staffMember.availability[dayOfWeek as keyof typeof staffMember.availability]) {

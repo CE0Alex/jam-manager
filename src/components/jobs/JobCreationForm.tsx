@@ -159,8 +159,8 @@ export default function JobCreationForm({
   };
   
   const handleScheduleJob = () => {
-    // Navigate to the schedule page
-    navigate("/schedule/new");
+    // Navigate to the interactive scheduler instead of the standalone form
+    navigate("/jobs", { state: { activeJob: createdJobId, openScheduler: true } });
   };
 
   return (

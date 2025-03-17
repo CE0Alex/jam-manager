@@ -77,6 +77,15 @@ export default function JobDetail() {
         </div>
 
         <div className="flex space-x-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/schedule`, {
+              state: { activeJob: job.id, openScheduler: true }
+            })}
+          >
+            <Calendar className="h-4 w-4 mr-2" />
+            Schedule
+          </Button>
           <Link to={`/jobs/${job.id}/edit`}>
             <Button variant="outline">
               <Edit className="h-4 w-4 mr-2" />

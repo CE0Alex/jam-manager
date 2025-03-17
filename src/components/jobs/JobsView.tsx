@@ -6,6 +6,7 @@ import JobsFilter from "./JobsFilter";
 import JobsTable from "./JobsTable";
 import { Job, JobStatus, JobPriority } from "@/types";
 import { useAppContext } from "@/context/AppContext";
+import CreateJobDialog from "./CreateJobDialog";
 
 interface JobsViewProps {
   jobs?: Job[];
@@ -20,6 +21,9 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs, onCreateJob }) => {
     deleteJob,
     setJobFilters,
   } = useAppContext();
+  
+  // State for dialog
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   // Use provided jobs or fall back to context
   const allJobs = propJobs || contextJobs;
@@ -50,7 +54,8 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs, onCreateJob }) => {
     if (onCreateJob) {
       onCreateJob();
     } else {
-      navigate("/jobs/new");
+      // Instead of navigating, open the dialog
+      setDialogOpen(true);
     }
   };
 
@@ -63,6 +68,7 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs, onCreateJob }) => {
             View and manage all print jobs in your system
           </p>
         </div>
+        {/* Use the Button to trigger the dialog */}
         <Button onClick={handleCreateJob}>
           <Plus className="h-4 w-4 mr-2" />
           Create New Job
@@ -79,6 +85,12 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs, onCreateJob }) => {
         onEditJob={handleEditJob}
         onDeleteJob={handleDeleteJob}
         onCreateJob={handleCreateJob}
+      />
+
+      {/* Add the CreateJobDialog component */}
+      <CreateJobDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen}
       />
     </div>
   );
