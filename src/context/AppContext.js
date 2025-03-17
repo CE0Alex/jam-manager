@@ -606,7 +606,6 @@ export function AppProvider({ children }) {
             schedule,
             feedback,
             settings,
-            businessHours: settings.businessHours,
             jobTypes
         });
         
@@ -617,7 +616,7 @@ export function AppProvider({ children }) {
         return () => {
             if (backupIntervalId) clearInterval(backupIntervalId);
         };
-    }, [jobs, staff, machines, schedule, feedback, settings, businessHours, jobTypes]);
+    }, [jobs, staff, machines, schedule, feedback, settings, jobTypes]);
     // Add a function to attempt data recovery if needed
     const recoverData = () => {
         try {
