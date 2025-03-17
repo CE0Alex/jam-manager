@@ -1,26 +1,36 @@
-// Import SimpleProductionCalendar as a fallback
+// Import both calendar components to ensure they're available
 import SimpleProductionCalendar from './SimpleProductionCalendar';
-// Try to import the main ProductionCalendar component with error handling
-let ProductionCalendar;
+import ProductionCalendarFixed from './ProductionCalendar.fixed';
 
-// Use dynamic import with ES modules instead of require
+// Define a variable for the main component
+let ProductionCalendar = ProductionCalendarFixed;
+
+// Use dynamic import with ES modules to try loading the full component
 try {
-  // Import directly instead of using require
-  ProductionCalendar = SimpleProductionCalendar; // Default to fallback
+  // Set up an async function to load the component
+  const loadFullCalendar = async () => {
+    try {
+      // Try to import the full component
+      const module = await import('./ProductionCalendar');
+      if (module && module.default) {
+        ProductionCalendar = module.default;
+        console.log('Successfully loaded full ProductionCalendar component');
+      }
+    } catch (error) {
+      console.warn('Error loading ProductionCalendar, using fixed fallback:', error.message);
+    }
+  };
   
-  // We'll try to import the real component in a separate import
-  import('./ProductionCalendar').then(module => {
-    ProductionCalendar = module.default;
-    console.log('Successfully loaded ProductionCalendar component');
-  }).catch(error => {
-    console.warn('Failed to import ProductionCalendar, using SimpleProductionCalendar as fallback:', error.message);
-  });
+  // Start the loading process
+  loadFullCalendar();
 } catch (error) {
-  console.warn('Failed to setup ProductionCalendar import, using SimpleProductionCalendar as fallback:', error.message);
-  ProductionCalendar = SimpleProductionCalendar;
+  console.warn('Error setting up ProductionCalendar import, using fixed fallback:', error.message);
 }
 
-// Export both the main and fallback components
+// Export all available calendar components for flexibility
 export { SimpleProductionCalendar };
+export { ProductionCalendarFixed };
 export { ProductionCalendar };
+
+// Default export is the best available calendar
 export default ProductionCalendar; 
