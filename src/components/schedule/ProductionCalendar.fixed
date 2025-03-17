@@ -23,6 +23,7 @@ import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import * as autoScheduleUtils from "@/lib/scheduling/autoScheduleUtils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import SimpleProductionCalendar from './SimpleProductionCalendar';
 
 // Create a proper wrapper component that implements the ProductionCalendar functionality
 const ProductionCalendarFixed = (props) => {
@@ -121,15 +122,18 @@ const ProductionCalendarFixed = (props) => {
 
     // Open the schedule dialog with a selected job
     const openScheduleDialog = (job) => {
-        // Instead of showing a popup dialog, navigate to the dedicated form
-        if (job && job.id) {
-            navigate('/schedule/job', { state: { preselectedJobId: job.id } });
-            
-            // Call onScheduled to signal completion
-            if (onScheduled && typeof onScheduled === 'function') {
-                onScheduled();
-            }
-        }
+        setSelectedJob(job);
+        setSelectedStaffId("unassigned");
+        setScheduleData({
+            startDate: format(new Date(), "yyyy-MM-dd"),
+            startTime: "09:00",
+            endTime: "",
+            notes: ""
+        });
+        setIsScheduleDialogOpen(true);
+    
+        // Generate scheduling suggestions
+        generateScheduleSuggestions(job);
     };
 
     // Close the schedule dialog
@@ -713,14 +717,12 @@ const ProductionCalendarFixed = (props) => {
                                 value: "unassigned",
                                 children: "Unassigned"
                               }),
-                              staff
-                                .filter(staffMember => staffMember.id) // Filter out staff with empty or undefined IDs
-                                .map((staffMember) => (
-                                  _jsx(SelectItem, {
-                                    value: staffMember.id,
-                                    children: staffMember.name
-                                  }, staffMember.id)
-                                ))
+                              staff.map((staffMember) => (
+                                _jsx(SelectItem, {
+                                  value: staffMember.id,
+                                  children: staffMember.name
+                                }, staffMember.id)
+                              ))
                             ]
                           })
                         ]
@@ -897,19 +899,14 @@ const ProductionCalendarFixed = (props) => {
       ]
     });
   } catch (error) {
-    console.error("Error rendering ProductionCalendar:", error);
+    console.error("Error rendering ProductionCalendar, falling back to SimpleProductionCalendar:", error);
     
-    // Error state instead of fallback
-    return _jsxs("div", {
-      className: "p-8 text-center",
-      children: [
-        _jsx("h2", { className: "text-2xl font-bold text-red-600 mb-4", children: "Calendar Error" }),
-        _jsx("p", { className: "mb-4", children: "There was an error loading the calendar." }),
-        _jsx(Button, {
-          onClick: () => window.location.reload(),
-          children: "Reload Page"
-        })
-      ]
+    // Emergency fallback in case the advanced implementation fails
+    return _jsx(SimpleProductionCalendar, {
+      initialDate: initialDate, 
+      initialView: initialView,
+      initialJob: initialJob,
+      onScheduled: onScheduled
     });
   }
 };

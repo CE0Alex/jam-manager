@@ -47,6 +47,7 @@ const SettingsPage = lazyWithRetry(() => import("./pages/SettingsPage"));
 const NotificationsPage = lazyWithRetry(() => import("./pages/NotificationsPage"));
 const HelpPage = lazyWithRetry(() => import("./pages/HelpPage"));
 const UnifiedJobWorkflow = lazyWithRetry(() => import("./components/jobs/UnifiedJobWorkflow"));
+const ScheduleJobForm = lazyWithRetry(() => import("./components/schedule/ScheduleJobForm"));
 
 // Debug panel for development mode
 const DebugPanel = () => {
@@ -193,6 +194,15 @@ function App() {
                 element={
                   <MainLayout title="Production Schedule">
                     <ScheduleView />
+                  </MainLayout>
+                } 
+              />
+              
+              <Route 
+                path="schedule/job" 
+                element={
+                  <MainLayout title="Schedule Job">
+                    <ScheduleJobForm />
                   </MainLayout>
                 } 
               />

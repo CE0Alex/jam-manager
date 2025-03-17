@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
-import ProductionCalendar from "./ProductionCalendar.fixed";
+import ProductionCalendar from "./ProductionCalendar.fixed.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
 import { addDays, format, isWithinInterval, parseISO, startOfDay, endOfDay } from "date-fns";
+import { Button } from "@/components/ui/button";
 
 // Debug statement to confirm file is loaded
 console.log("ScheduleView component loaded successfully");
@@ -17,6 +18,7 @@ const ScheduleView = ({
   initialTab = "calendar",
 }: ScheduleViewProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { getJobById, jobs, schedule, staff } = useAppContext();
   
   // State to handle showing the production calendar dialog for a specific job
@@ -57,14 +59,14 @@ const ScheduleView = ({
     if (state?.activeJob && state?.openScheduler) {
       const job = getJobById(state.activeJob);
       if (job) {
-        // Set the job for scheduling
-        setSelectedJobForSchedule(job);
+        // Instead of showing a popup, navigate to the Schedule Job page
+        navigate("/schedule/job", { state: { preselectedJobId: state.activeJob } });
         
         // Clear the location state after using it
         window.history.replaceState({}, document.title);
       }
     }
-  }, [location, getJobById]);
+  }, [location, getJobById, navigate]);
 
   return (
     <div className="container mx-auto p-4 space-y-6 bg-background">
@@ -75,6 +77,12 @@ const ScheduleView = ({
         <p className="text-muted-foreground">
           Manage your production schedule
         </p>
+      </div>
+      
+      <div className="flex justify-end">
+        <Button onClick={() => navigate('/schedule/job')}>
+          Schedule Job
+        </Button>
       </div>
 
       <ProductionCalendar initialJob={selectedJobForSchedule} onScheduled={() => setSelectedJobForSchedule(null)} />

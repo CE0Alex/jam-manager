@@ -3,32 +3,21 @@ import { createContext, useContext, useState, useEffect, } from "react";
 import { mockStaff, mockJobs, mockMachines, mockSchedule, generateDashboardMetrics, } from "@/lib/mockData";
 import { addDays, format } from "date-fns";
 import { detectScheduleConflicts } from "@/lib/scheduling";
+// Import the new persistence utilities
+import { 
+    loadFromStorage, 
+    saveToStorage, 
+    backupAppData, 
+    restoreFromBackup,
+    initializeAutomaticBackups
+} from "@/lib/persistentStorage";
+
 const AppContext = createContext(undefined);
+
 export function AppProvider({ children }) {
     // Load data from localStorage or use mock data as defaults
-    const loadFromStorage = (key, defaultValue) => {
-        try {
-            const storedData = localStorage.getItem(key);
-            if (!storedData) {
-                console.warn(`No data found for ${key} in localStorage, using default value:`, defaultValue);
-                return defaultValue;
-            }
-            try {
-                const parsedData = JSON.parse(storedData);
-                console.log(`Successfully loaded ${key} from localStorage:`, key === 'jobTypes' ? parsedData : `[${typeof parsedData}]`);
-                return parsedData;
-            }
-            catch (parseError) {
-                console.error(`Error parsing ${key} from localStorage:`, parseError);
-                console.warn(`Resetting corrupted ${key} data to default value`);
-                localStorage.setItem(key, JSON.stringify(defaultValue));
-                return defaultValue;
-            }
-        }
-        catch (error) {
-            console.error(`Error accessing ${key} from localStorage:`, error);
-            return defaultValue;
-        }
+    const loadFromStorageWithFallback = (key, defaultValue) => {
+        return loadFromStorage(key, defaultValue);
     };
     // Clear localStorage to ensure fresh data
     useEffect(() => {
@@ -72,13 +61,13 @@ export function AppProvider({ children }) {
         },
     };
     // State for jobs, staff, schedule, settings
-    const [settings, setSettings] = useState(loadFromStorage("settings", defaultSettings));
-    const [jobTypes, setJobTypes] = useState(loadFromStorage("jobTypes", defaultJobTypes));
-    const [jobs, setJobs] = useState(loadFromStorage("jobs", mockJobs));
-    const [staff, setStaff] = useState(loadFromStorage("staff", mockStaff));
-    const [machines, setMachines] = useState(loadFromStorage("machines", mockMachines));
-    const [schedule, setSchedule] = useState(loadFromStorage("schedule", mockSchedule));
-    const [feedback, setFeedback] = useState(loadFromStorage("feedback", []));
+    const [settings, setSettings] = useState(loadFromStorageWithFallback("settings", defaultSettings));
+    const [jobTypes, setJobTypes] = useState(loadFromStorageWithFallback("jobTypes", defaultJobTypes));
+    const [jobs, setJobs] = useState(loadFromStorageWithFallback("jobs", mockJobs));
+    const [staff, setStaff] = useState(loadFromStorageWithFallback("staff", mockStaff));
+    const [machines, setMachines] = useState(loadFromStorageWithFallback("machines", mockMachines));
+    const [schedule, setSchedule] = useState(loadFromStorageWithFallback("schedule", mockSchedule));
+    const [feedback, setFeedback] = useState(loadFromStorageWithFallback("feedback", []));
     const [dashboardMetrics, setDashboardMetrics] = useState(generateDashboardMetrics());
     const [jobFilters, setJobFilters] = useState({});
     const [filteredJobs, setFilteredJobs] = useState(jobs);
@@ -186,59 +175,54 @@ export function AppProvider({ children }) {
         const updatedMetrics = calculateDashboardMetrics();
         setDashboardMetrics(updatedMetrics);
     };
-    // Save data to localStorage when it changes - with debounce and error handling
-    const saveToStorage = (key, data) => {
-        try {
-            localStorage.setItem(key, JSON.stringify(data));
-        }
-        catch (error) {
-            console.error(`Error saving ${key} to localStorage:`, error);
-        }
+    // Update saveToStorage to use the new utility
+    const saveToStorageWithBackup = (key, data) => {
+        return saveToStorage(key, data);
     };
     // Use a more efficient approach to save data and refresh dashboard
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            saveToStorage("jobs", jobs);
+            saveToStorageWithBackup("jobs", jobs);
             refreshDashboard();
         }, 300); // Debounce for 300ms
         return () => clearTimeout(timeoutId);
     }, [jobs]);
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            saveToStorage("staff", staff);
+            saveToStorageWithBackup("staff", staff);
             refreshDashboard();
         }, 300);
         return () => clearTimeout(timeoutId);
     }, [staff]);
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            saveToStorage("machines", machines);
+            saveToStorageWithBackup("machines", machines);
             refreshDashboard();
         }, 300);
         return () => clearTimeout(timeoutId);
     }, [machines]);
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            saveToStorage("schedule", schedule);
+            saveToStorageWithBackup("schedule", schedule);
             refreshDashboard();
         }, 300);
         return () => clearTimeout(timeoutId);
     }, [schedule]);
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            saveToStorage("feedback", feedback);
+            saveToStorageWithBackup("feedback", feedback);
         }, 300);
         return () => clearTimeout(timeoutId);
     }, [feedback]);
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            saveToStorage("settings", settings);
+            saveToStorageWithBackup("settings", settings);
         }, 300);
         return () => clearTimeout(timeoutId);
     }, [settings]);
     useEffect(() => {
         const timeoutId = setTimeout(() => {
-            saveToStorage("jobTypes", jobTypes);
+            saveToStorageWithBackup("jobTypes", jobTypes);
         }, 300);
         return () => clearTimeout(timeoutId);
     }, [jobTypes]);
@@ -612,6 +596,42 @@ export function AppProvider({ children }) {
             setStaff(updatedStaff);
         }
     };
+    // Set up automatic backup of all app data
+    useEffect(() => {
+        // Create a function that returns the current app state
+        const getAppData = () => ({
+            jobs,
+            staff,
+            machines,
+            schedule,
+            feedback,
+            settings,
+            jobTypes
+        });
+        
+        // Initialize automatic backups every 5 minutes
+        const backupIntervalId = initializeAutomaticBackups(getAppData, 5);
+        
+        // Clean up the interval when component unmounts
+        return () => {
+            if (backupIntervalId) clearInterval(backupIntervalId);
+        };
+    }, [jobs, staff, machines, schedule, feedback, settings, jobTypes]);
+    // Add a function to attempt data recovery if needed
+    const recoverData = () => {
+        try {
+            const recoveredData = restoreFromBackup();
+            if (recoveredData) {
+                console.log('Successfully recovered data from backup');
+                // You could set state here if needed
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Failed to recover data:', error);
+            return false;
+        }
+    };
     const contextValue = {
         // Jobs
         jobs,
@@ -653,6 +673,8 @@ export function AppProvider({ children }) {
         settings,
         updateBusinessHours,
         applyDefaultAvailabilityToStaff,
+        // New recovery function
+        recoverData
     };
     return (_jsx(AppContext.Provider, { value: contextValue, children: children }));
 }

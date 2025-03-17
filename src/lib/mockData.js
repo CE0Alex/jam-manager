@@ -2,9 +2,9 @@
 export const mockStaff = [
     {
         id: "staff-1",
-        name: "John Smith",
+        name: "Isaac Alicea",
         role: "Production Manager",
-        email: "john@example.com",
+        email: "isaac@example.com",
         phone: "555-1234",
         skills: ["printing", "design", "management"],
         jobTypeCapabilities: ["print", "design", "large_format"],
@@ -33,12 +33,12 @@ export const mockStaff = [
     },
     {
         id: "staff-2",
-        name: "Jane Doe",
-        role: "Graphic Designer",
-        email: "jane@example.com",
+        name: "Aaron Guldin",
+        role: "Production Manager",
+        email: "aaron@example.com",
         phone: "555-5678",
-        skills: ["design", "illustration", "typography"],
-        jobTypeCapabilities: ["design", "branding"],
+        skills: ["printing", "binding", "production planning"],
+        jobTypeCapabilities: ["print", "finishing", "large_format"],
         availability: {
             monday: true,
             tuesday: true,
@@ -64,12 +64,12 @@ export const mockStaff = [
     },
     {
         id: "staff-3",
-        name: "Mike Johnson",
-        role: "Print Operator",
+        name: "Mike Cimerola",
+        role: "Sales Manager",
         email: "mike@example.com",
         phone: "555-9012",
-        skills: ["printing", "binding", "finishing"],
-        jobTypeCapabilities: ["print", "finishing"],
+        skills: ["sales", "customer service", "project management"],
+        jobTypeCapabilities: ["customer_service", "sales"],
         availability: {
             monday: true,
             tuesday: true,
@@ -95,11 +95,11 @@ export const mockStaff = [
     },
     {
         id: "staff-4",
-        name: "Sarah Williams",
-        role: "Customer Service",
-        email: "sarah@example.com",
+        name: "Jordan Guldin",
+        role: "Sales Manager",
+        email: "jordan@example.com",
         phone: "555-3456",
-        skills: ["customer service", "sales", "order processing"],
+        skills: ["sales", "marketing", "client relations"],
         jobTypeCapabilities: ["customer_service", "sales"],
         availability: {
             monday: true,
