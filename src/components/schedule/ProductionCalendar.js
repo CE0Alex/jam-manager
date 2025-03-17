@@ -427,6 +427,17 @@ export default function ProductionCalendar({ initialDate = new Date(), initialVi
             setScheduleData(prev => ({ ...prev, startDate: format(currentDate, "yyyy-MM-dd") }));
         }
     }, [currentDate, view]);
+
+    // Handle initialJob prop - open scheduling dialog when a job is passed in
+    useEffect(() => {
+        if (initialJob) {
+            setSelectedJob(initialJob);
+            setIsScheduleDialogOpen(true);
+            // Generate scheduling suggestions for the job
+            generateScheduleSuggestions(initialJob);
+        }
+    }, [initialJob]);
+
     // Render day view
     const renderDayView = () => {
         const dayStr = format(currentDate, "yyyy-MM-dd");

@@ -2,7 +2,7 @@
 export const mockStaff = [
     {
         id: "staff-1",
-        name: "Isaac Johnson",
+        name: "Isaac Alicea",
         role: "Production Manager",
         email: "isaac@example.com",
         phone: "555-1234",
@@ -33,7 +33,7 @@ export const mockStaff = [
     },
     {
         id: "staff-2",
-        name: "Aaron Wilson",
+        name: "Aaron Guldin",
         role: "Production Manager",
         email: "aaron@example.com",
         phone: "555-5678",
@@ -64,7 +64,7 @@ export const mockStaff = [
     },
     {
         id: "staff-3",
-        name: "Mike Barnes",
+        name: "Mike Cimerola",
         role: "Sales Manager",
         email: "mike@example.com",
         phone: "555-9012",
@@ -95,7 +95,7 @@ export const mockStaff = [
     },
     {
         id: "staff-4",
-        name: "Jordan Smith",
+        name: "Jordan Guldin",
         role: "Sales Manager",
         email: "jordan@example.com",
         phone: "555-3456",
