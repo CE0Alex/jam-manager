@@ -291,22 +291,35 @@ export default function ScheduleJobForm() {
     console.log("Staff count:", staff.length);
     console.log("Schedule events count:", schedule.length);
     
-    // Use the simpler scheduling utility
+    // Use the scheduling utility
     import("@/lib/scheduling/autoScheduleUtils").then(module => {
+      // First filter out staff with empty IDs to prevent errors
+      const validStaff = staff.filter(member => member.id && member.id.trim() !== "");
+      console.log(`Found ${validStaff.length} valid staff members (after filtering out empty IDs)`);
+      
       // Filter staff based on selection if a staff member is selected
       let staffToCheck;
       
       if (formData.staffId && formData.staffId !== "unassigned") {
-        staffToCheck = staff.filter(s => s.id === formData.staffId);
+        staffToCheck = validStaff.filter(s => s.id === formData.staffId);
+        console.log(`Using specifically selected staff member: ${staffToCheck[0]?.name || 'Unknown'}`);
       } else {
         // Filter by staff members who can handle this job type
-        staffToCheck = staff.filter(s => {
+        staffToCheck = validStaff.filter(s => {
           // If staff has no job type capabilities or empty array, assume they can handle all job types (for backward compatibility)
           if (!s.jobTypeCapabilities || s.jobTypeCapabilities.length === 0) {
+            console.log(`${s.name} has no job type capabilities, assuming they can handle all jobs`);
             return true;
           }
+          
           // Check if the staff member can handle this job type
-          return s.jobTypeCapabilities.includes(job.jobType);
+          const canHandle = s.jobTypeCapabilities.includes(job.jobType);
+          if (canHandle) {
+            console.log(`${s.name} can handle job type: ${job.jobType}`);
+          } else {
+            console.log(`${s.name} cannot handle job type: ${job.jobType}`);
+          }
+          return canHandle;
         });
       }
       
@@ -314,6 +327,7 @@ export default function ScheduleJobForm() {
       console.log(`Found ${staffToCheck.length} staff members qualified for this job type`);
       staffToCheck.forEach(s => console.log(` - ${s.name}`));
         
+      // Generate suggestions with the revised algorithm
       const suggestions = module.findScheduleSuggestions(
         job,
         staffToCheck,

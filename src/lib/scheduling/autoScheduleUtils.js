@@ -6,60 +6,105 @@ import { formatTime12Hour } from "../timeUtils";
 export function findScheduleSuggestions(job, staff, schedule, maxSuggestions = 5, daysToCheck = 10) {
     console.log("Finding schedule suggestions for job:", job.title);
     const suggestions = [];
+    
+    // Filter valid staff members first
+    const validStaff = staff.filter(member => {
+        // Skip staff members with empty IDs
+        if (!member.id || member.id.trim() === "") {
+            return false;
+        }
+        
+        // Check job type capability
+        if (member.jobTypeCapabilities && 
+            member.jobTypeCapabilities.length > 0 && 
+            !member.jobTypeCapabilities.includes(job.jobType)) {
+            console.log(`Skipping ${member.name} as they don't have capability for ${job.jobType}`);
+            return false;
+        }
+        
+        return true;
+    });
+    
+    if (validStaff.length === 0) {
+        console.log("No valid staff members found for this job type");
+        return [];
+    }
+    
     // Start checking from tomorrow
     const startDate = new Date();
     startDate.setHours(0, 0, 0, 0);
-    // Check each staff member
-    for (const staffMember of staff) {
-        // Skip if staff member has no skills or availability
-        if (!staffMember.skills.length)
-            continue;
-        // Skip if staff member doesn't have the capability for this job type
-        if (staffMember.jobTypeCapabilities &&
-            staffMember.jobTypeCapabilities.length > 0 &&
-            !staffMember.jobTypeCapabilities.includes(job.jobType)) {
-            console.log(`Skipping ${staffMember.name} as they don't have capability for ${job.jobType}`);
-            continue;
-        }
-        console.log("Checking staff member:", staffMember.name);
-        // Check each day
-        for (let dayOffset = 0; dayOffset < daysToCheck; dayOffset++) {
-            const checkDate = addDays(startDate, dayOffset);
-            const dateString = format(checkDate, "yyyy-MM-dd");
-            const dayOfWeek = checkDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    
+    // Track suggestions per staff member to ensure diversity
+    const suggestionsPerStaff = {};
+    validStaff.forEach(member => {
+        suggestionsPerStaff[member.id] = 0;
+    });
+    
+    // Maximum suggestions per staff member to ensure diversity
+    const maxSuggestionsPerStaff = Math.max(1, Math.floor(maxSuggestions / validStaff.length));
+    
+    // Check each day
+    for (let dayOffset = 0; dayOffset < daysToCheck; dayOffset++) {
+        const checkDate = addDays(startDate, dayOffset);
+        const dateString = format(checkDate, "yyyy-MM-dd");
+        const dayOfWeek = checkDate.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        
+        // For each day, check all staff to find options
+        for (const staffMember of validStaff) {
+            // Skip if we already have enough suggestions for this staff member
+            if (suggestionsPerStaff[staffMember.id] >= maxSuggestionsPerStaff) {
+                continue;
+            }
+            
             // Skip if staff is not available on this day
             if (!staffMember.availability[dayOfWeek]) {
                 continue;
             }
+            
             console.log(`Checking date ${dateString} for ${staffMember.name}`);
+            
             // Get availability hours for this day
             const availabilityHours = staffMember.availabilityHours?.[dayOfWeek];
+            
             // Default to 8am-5pm if not specified
             const defaultStart = "08:00";
             const defaultEnd = "17:00";
             const { start, end } = availabilityHours || { start: defaultStart, end: defaultEnd };
+            
             // Parse hours
             const [startHour, startMinute] = start.split(":").map(Number);
             const [endHour, endMinute] = end.split(":").map(Number);
+            
             // Check each possible time in 30-min increments
             const dayStart = new Date(checkDate);
             dayStart.setHours(startHour, startMinute, 0, 0);
             const dayEnd = new Date(checkDate);
             dayEnd.setHours(endHour, endMinute, 0, 0);
+            
             // Get existing events for this day and staff
-            const existingEvents = schedule.filter(event => event.staffId === staffMember.id &&
-                format(new Date(event.startTime), "yyyy-MM-dd") === dateString);
+            const existingEvents = schedule.filter(event => 
+                event.staffId === staffMember.id &&
+                format(new Date(event.startTime), "yyyy-MM-dd") === dateString
+            );
+            
             // Try each possible start time
             let currentTime = new Date(dayStart);
             const requiredDuration = job.estimatedHours * 60; // Convert to minutes
-            while (currentTime <= dayEnd) {
+            
+            // Only check a limited number of slots per day per staff to avoid overloading with one person
+            let slotsCheckedForDay = 0;
+            const maxSlotsPerDay = 3; // Limit the number of slots we check per day
+            
+            while (currentTime <= dayEnd && slotsCheckedForDay < maxSlotsPerDay) {
                 // Calculate end time
                 const endTime = addMinutes(currentTime, requiredDuration);
+                
                 // Skip if end time exceeds day end
                 if (endTime > dayEnd) {
                     currentTime = addMinutes(currentTime, 30);
                     continue;
                 }
+                
                 // Check if this slot conflicts with existing events
                 const hasConflict = existingEvents.some(event => {
                     const eventStart = new Date(event.startTime);
@@ -67,12 +112,14 @@ export function findScheduleSuggestions(job, staff, schedule, maxSuggestions = 5
                     // Check for overlap
                     return !(endTime <= eventStart || currentTime >= eventEnd);
                 });
+                
                 if (!hasConflict) {
                     // This is an available slot - add to suggestions
                     // Calculate scores
                     const relevanceScore = calculateSkillRelevance(staffMember, job);
                     const utilizationScore = 80; // Default good score for simplicity
                     const totalScore = (relevanceScore * 0.7) + (utilizationScore * 0.3);
+                    
                     suggestions.push({
                         staffId: staffMember.id,
                         staffName: staffMember.name,
@@ -84,20 +131,64 @@ export function findScheduleSuggestions(job, staff, schedule, maxSuggestions = 5
                         utilizationScore,
                         totalScore
                     });
+                    
+                    // Increment suggestion count for this staff member
+                    suggestionsPerStaff[staffMember.id]++;
+                    slotsCheckedForDay++;
+                    
                     // If we have enough suggestions for this staff member, move to next
-                    if (suggestions.filter(s => s.staffId === staffMember.id).length >= 2) {
+                    if (suggestionsPerStaff[staffMember.id] >= maxSuggestionsPerStaff) {
                         break;
                     }
                 }
+                
                 // Move to next time slot
                 currentTime = addMinutes(currentTime, 30);
             }
         }
+        
+        // Check if we have enough total suggestions
+        if (suggestions.length >= maxSuggestions) {
+            break;
+        }
     }
+    
     // Sort by total score (descending) and limit to max suggestions
-    return suggestions
-        .sort((a, b) => b.totalScore - a.totalScore)
-        .slice(0, maxSuggestions);
+    // Make sure we include at least one suggestion from each qualified staff if possible
+    const result = [];
+    const staffIdsIncluded = new Set();
+    
+    // First, include the top suggestion from each staff member
+    for (const staffId of Object.keys(suggestionsPerStaff)) {
+        const bestForStaff = suggestions
+            .filter(s => s.staffId === staffId)
+            .sort((a, b) => b.totalScore - a.totalScore)[0];
+        
+        if (bestForStaff) {
+            result.push(bestForStaff);
+            staffIdsIncluded.add(staffId);
+        }
+    }
+    
+    // Then, fill the remaining slots with the best overall suggestions
+    const remainingSlots = maxSuggestions - result.length;
+    if (remainingSlots > 0) {
+        const remainingSuggestions = suggestions
+            .filter(s => !result.includes(s))
+            .sort((a, b) => b.totalScore - a.totalScore)
+            .slice(0, remainingSlots);
+        
+        result.push(...remainingSuggestions);
+    }
+    
+    // If we still don't have enough, just take the top scoring suggestions
+    if (result.length < maxSuggestions) {
+        return suggestions
+            .sort((a, b) => b.totalScore - a.totalScore)
+            .slice(0, maxSuggestions);
+    }
+    
+    return result.slice(0, maxSuggestions);
 }
 /**
  * Calculate how relevant a staff member's skills are for a job
