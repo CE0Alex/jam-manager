@@ -1,6 +1,6 @@
 // Import SimpleProductionCalendar and ProductionCalendar.fixed
 import SimpleProductionCalendar from './SimpleProductionCalendar';
-import ProductionCalendarFixed from './ProductionCalendar.fixed';
+import ProductionCalendarFixed from './ProductionCalendar.fixed.js';
 
 // Export both components
 export { SimpleProductionCalendar };
