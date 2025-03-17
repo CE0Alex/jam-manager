@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { ScheduleEvent } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import ScheduleSuggestions from "./ScheduleSuggestions";
 
 export default function ScheduleJobForm() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { jobs, staff, schedule, settings, addScheduleEvent, getJobById, jobTypes } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<string>("manual");
@@ -527,6 +528,26 @@ export default function ScheduleJobForm() {
       }
     }
   }, [formData.jobId, formData.startDate, formData.startTime, formData.staffId, getJobById, staff, settings.businessHours]);
+
+  // Handle preselected job from navigation state
+  useEffect(() => {
+    const state = location.state as { preselectedJobId?: string } | null;
+    if (state?.preselectedJobId) {
+      const job = getJobById(state.preselectedJobId);
+      if (job) {
+        setFormData(prev => ({
+          ...prev,
+          jobId: state.preselectedJobId
+        }));
+        
+        // Generate suggestions for this job
+        generateSuggestions(state.preselectedJobId);
+        
+        // Clear the location state after using it
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location, getJobById]);
 
   return (
     <div className="w-full h-full bg-gray-50">

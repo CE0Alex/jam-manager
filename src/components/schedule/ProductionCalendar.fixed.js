@@ -121,18 +121,15 @@ const ProductionCalendarFixed = (props) => {
 
     // Open the schedule dialog with a selected job
     const openScheduleDialog = (job) => {
-        setSelectedJob(job);
-        setSelectedStaffId("unassigned");
-        setScheduleData({
-            startDate: format(new Date(), "yyyy-MM-dd"),
-            startTime: "09:00",
-            endTime: "",
-            notes: ""
-        });
-        setIsScheduleDialogOpen(true);
-    
-        // Generate scheduling suggestions
-        generateScheduleSuggestions(job);
+        // Instead of showing a popup dialog, navigate to the dedicated form
+        if (job && job.id) {
+            navigate('/schedule/job', { state: { preselectedJobId: job.id } });
+            
+            // Call onScheduled to signal completion
+            if (onScheduled && typeof onScheduled === 'function') {
+                onScheduled();
+            }
+        }
     };
 
     // Close the schedule dialog
