@@ -9,8 +9,67 @@
 import { JobPriority } from "@/types";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Set the worker source path for pdf.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Properly set up the PDF.js worker
+export const setupPdfWorker = async () => {
+  try {
+    console.log("Setting up PDF.js worker for version:", pdfjsLib.version);
+    
+    // In production, use CDN directly
+    if (import.meta.env.PROD) {
+      const workerUrl = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+      console.log("Using PDF.js worker from CDN:", workerUrl);
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+      return true;
+    }
+    
+    // In development, try multiple approaches
+    const currentPort = window.location.port;
+    console.log(`Current application port: ${currentPort}`);
+    
+    // Try several approaches to locate the worker
+    const possibleWorkerPaths = [
+      // Direct CDN path (most reliable)
+      `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`,
+      // Correct port in development
+      `${window.location.protocol}//${window.location.hostname}:${currentPort}/node_modules/pdfjs-dist/build/pdf.worker.min.mjs`,
+      // From public directory
+      `${window.location.protocol}//${window.location.hostname}:${currentPort}/pdf.worker.min.mjs`,
+      // Relative to base URL
+      new URL('pdfjs-dist/build/pdf.worker.min.mjs', document.baseURI).href
+    ];
+    
+    // Try each path until one works
+    for (const workerPath of possibleWorkerPaths) {
+      try {
+        console.log(`Trying PDF.js worker at: ${workerPath}`);
+        // Check if the worker file exists
+        const response = await fetch(workerPath, { method: 'HEAD' });
+        if (response.ok) {
+          console.log(`PDF.js worker found at: ${workerPath}`);
+          pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+          return true;
+        }
+      } catch (e) {
+        console.log(`Worker not found at: ${workerPath}`);
+      }
+    }
+    
+    // If all paths failed, use the CDN directly without checking
+    console.warn("All worker paths failed, using CDN directly");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+    return true;
+  } catch (error) {
+    console.error("Error setting up PDF.js worker:", error);
+    // Fallback to empty string which will use the fake worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+    return false;
+  }
+};
+
+// Initialize the worker immediately
+setupPdfWorker().then(success => {
+  console.log(`PDF.js worker initialization ${success ? 'successful' : 'failed'}`);
+});
 
 export interface ExtractedJobData {
   title?: string;
@@ -28,44 +87,79 @@ export interface ExtractedJobData {
  * @param file The PDF file to extract text from
  * @returns A promise that resolves to the extracted text
  */
-async function extractTextFromPdf(file: File): Promise<string> {
+export const extractTextFromPdf = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
+    // Check if worker is properly initialized
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      console.warn("PDF.js worker not initialized, attempting to initialize now");
+      setupPdfWorker().catch(err => {
+        console.error("Failed to initialize PDF.js worker:", err);
+      });
+    }
+    
     const reader = new FileReader();
-
-    reader.onload = async function () {
+    
+    reader.onload = async (event) => {
       try {
-        const pdfData = new Uint8Array(reader.result as ArrayBuffer);
-        const loadingTask = pdfjsLib.getDocument({ data: pdfData });
-        const pdf = await loadingTask.promise;
-
-        let fullText = "";
-
-        // Extract text from each page
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items
-            .map((item: any) => item.str)
-            .join(" ");
-          fullText += pageText + "\n";
+        if (!event.target || !event.target.result) {
+          throw new Error("Failed to read file");
         }
-
-        console.log("PDF text extraction successful");
-        resolve(fullText);
+        
+        const typedArray = new Uint8Array(event.target.result as ArrayBuffer);
+        
+        try {
+          console.log("Loading PDF document...");
+          // Load the PDF document
+          const loadingTask = pdfjsLib.getDocument(typedArray);
+          const pdf = await loadingTask.promise;
+          
+          let fullText = "";
+          let debugText = []; // For debugging with original formatting
+          
+          console.log(`PDF loaded successfully. Document has ${pdf.numPages} pages.`);
+          
+          // Extract text from each page
+          for (let i = 1; i <= pdf.numPages; i++) {
+            console.log(`Processing page ${i}/${pdf.numPages}`);
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            
+            // Keep debug info with line positions
+            const textItems = textContent.items.map((item: any) => {
+              if (item.str) {
+                debugText.push(item.str);
+              }
+              return item.str ? item.str : "";
+            });
+            
+            fullText += textItems.join(" ") + "\n";
+          }
+          
+          // Log the raw extracted text with minimal processing for debugging
+          console.log("== RAW PDF TEXT (START) ==");
+          console.log(debugText.join("\n"));
+          console.log("== RAW PDF TEXT (END) ==");
+          
+          resolve(fullText);
+        } catch (error) {
+          console.error("Error processing PDF:", error);
+          throw error;
+        }
       } catch (error) {
         console.error("Error extracting text from PDF:", error);
         reject(error);
       }
     };
-
-    reader.onerror = function () {
-      console.error("Error reading file");
-      reject(new Error("Error reading file"));
+    
+    reader.onerror = (error) => {
+      console.error("Error reading file:", error);
+      reject(new Error("Failed to read the file"));
     };
-
+    
+    // Read the file as an array buffer
     reader.readAsArrayBuffer(file);
   });
-}
+};
 
 /**
  * Parse extracted text to identify job information
@@ -82,201 +176,161 @@ function parseJobDataFromText(
 
   // Normalize text for easier parsing
   const normalizedText = text.replace(/\s+/g, " ").toLowerCase();
+  
+  // For debugging
+  console.log("Normalized text from PDF:", normalizedText);
 
-  // Extract invoice number (located in the top right of the PDF)
+  // Extract Job Ticket number (often shows as J#### at top right)
+  const jobNumberMatch = 
+    normalizedText.match(/j(\d{4,5})\b/i) ||
+    normalizedText.match(/job#?\s*:\s*(\d+)/i) ||
+    normalizedText.match(/job\s+ticket\s+.*?(\d{4,})/i);
+    
+  if (jobNumberMatch && jobNumberMatch[1]) {
+    data.title = `JOB-${jobNumberMatch[1].trim()}`;
+  }
+  
+  // Extract Invoice number (usually labeled as "Invoice #:")
   const invoiceMatch =
-    normalizedText.match(
-      /invoice\s*(?:#|number|no|num)?[:\s]*(\w[\w\s-]*\d+)(?:\s|$)/i,
-    ) ||
-    normalizedText.match(
-      /inv\s*(?:#|number|no|num)?[:\s]*(\w[\w\s-]*\d+)(?:\s|$)/i,
-    );
+    normalizedText.match(/invoice\s*#\s*:\s*(\d+)/i) ||
+    normalizedText.match(/invoice\s*#\s*(\d+)/i) ||
+    normalizedText.match(/inv\s*#\s*:\s*(\d+)/i);
+    
   if (invoiceMatch && invoiceMatch[1]) {
-    data.title = invoiceMatch[1].trim().toUpperCase();
-  } else {
-    // Use filename as fallback, removing extension and formatting
+    // If we found an invoice number and no job number, use the invoice number as title
+    if (!data.title) {
+      data.title = `INV-${invoiceMatch[1].trim()}`;
+    } else {
+      // Otherwise add it to notes
+      data.notes = `Invoice #: ${invoiceMatch[1].trim()}`;
+    }
+  }
+  
+  // If we still don't have a title, fallback to filename
+  if (!data.title) {
     data.title = fileName
       .replace(/\.pdf$/i, "")
       .replace(/[-_]/g, " ")
       .toUpperCase();
   }
 
-  // Extract contact information
-  const contactMatch =
-    normalizedText.match(/contact[:\s]+(\w[\w\s&,.@-]+)(?:\s|$)/i) ||
-    normalizedText.match(/attention[:\s]+(\w[\w\s&,.@-]+)(?:\s|$)/i) ||
-    normalizedText.match(/attn[:\s]+(\w[\w\s&,.@-]+)(?:\s|$)/i);
-  if (contactMatch && contactMatch[1]) {
-    data.client = contactMatch[1]
+  // Extract Client name (from Bill To/Ship To section)
+  const clientMatch =
+    normalizedText.match(/bill\s+to\s*:\s*[#]?\d*\s*([a-z0-9\s&,.]+)/i) ||
+    normalizedText.match(/ship\s+to\s*:\s*([a-z0-9\s&,.]+)/i) ||
+    normalizedText.match(/customer\s*:?\s*([a-z0-9\s&,.]+)/i);
+    
+  if (clientMatch && clientMatch[1]) {
+    data.client = clientMatch[1]
       .trim()
       .replace(/\b\w/g, (l) => l.toUpperCase());
   }
-
-  // Extract description from the production section
-  const productionDescMatch =
-    normalizedText.match(
-      /production[\s\S]*?description[:\s]+(\w[\w\s,.]+?)(?:\s{2,}|$)/i,
-    ) ||
-    normalizedText.match(
-      /production[\s\S]*?details[:\s]+(\w[\w\s,.]+?)(?:\s{2,}|$)/i,
-    );
-  if (productionDescMatch && productionDescMatch[1]) {
-    data.description = productionDescMatch[1].trim();
-  } else {
-    // Fallback to general description if production-specific not found
-    const descMatch =
-      normalizedText.match(/description[:\s]+(\w[\w\s,.]+?)(?:\s{2,}|$)/i) ||
-      normalizedText.match(/details[:\s]+(\w[\w\s,.]+?)(?:\s{2,}|$)/i);
-    if (descMatch && descMatch[1]) {
-      data.description = descMatch[1].trim();
+  
+  // If no client yet, try the contact name
+  if (!data.client) {
+    const contactMatch = normalizedText.match(/contact\s*:\s*([a-z\s]+)/i);
+    if (contactMatch && contactMatch[1]) {
+      data.client = contactMatch[1]
+        .trim()
+        .replace(/\b\w/g, (l) => l.toUpperCase());
     }
   }
 
-  // Extract wanted by date
+  // Extract description (from Description field in Production section)
+  const descriptionMatch =
+    normalizedText.match(/description\s*:\s*([a-z0-9\s,.]+)(?:\s{2,}|$)/i) ||
+    normalizedText.match(/production.*?description\s*:\s*([a-z0-9\s,.]+)/i) ||
+    normalizedText.match(/ordered qty.*?description\s*:\s*([a-z0-9\s,.]+)/i);
+    
+  if (descriptionMatch && descriptionMatch[1]) {
+    data.description = descriptionMatch[1].trim()
+      .replace(/\b\w/g, (l) => l.toUpperCase());
+  }
+
+  // Extract wanted by date (deadline)
   const wantedByMatch =
-    normalizedText.match(
-      /wanted\s*by[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
-    ) ||
-    normalizedText.match(/need\s*by[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i) ||
-    normalizedText.match(
-      /required\s*by[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
-    );
+    normalizedText.match(/wanted\s+by\s*:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i) ||
+    normalizedText.match(/deliver\s+on\s*:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i) ||
+    normalizedText.match(/due\s+date\s*:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+    
   if (wantedByMatch && wantedByMatch[1]) {
     try {
-      // Attempt to parse the date
-      const dateParts = wantedByMatch[1].split(/[\/\-]/);
-      let year, month, day;
-
-      // Handle different date formats (MM/DD/YYYY or DD/MM/YYYY)
-      if (dateParts[2].length === 4) {
-        // Assuming MM/DD/YYYY or DD/MM/YYYY
-        year = parseInt(dateParts[2]);
-        month = parseInt(dateParts[0]);
-        day = parseInt(dateParts[1]);
-
-        // Validate month (if > 12, assume DD/MM/YYYY format)
-        if (month > 12) {
-          day = parseInt(dateParts[0]);
-          month = parseInt(dateParts[1]);
-        }
-      } else {
-        // Assuming MM/DD/YY or DD/MM/YY
-        year = 2000 + parseInt(dateParts[2]); // Assume 20xx for 2-digit years
-        month = parseInt(dateParts[0]);
-        day = parseInt(dateParts[1]);
-
-        // Validate month (if > 12, assume DD/MM/YY format)
-        if (month > 12) {
-          day = parseInt(dateParts[0]);
-          month = parseInt(dateParts[1]);
-        }
-      }
-
-      // Create date and format as YYYY-MM-DD for the form
-      const date = new Date(year, month - 1, day);
+      const dateStr = wantedByMatch[1].trim();
+      const [month, day, year] = dateStr.split('/').map(Number);
+      
+      // Handle 2-digit year (assuming 20xx)
+      const fullYear = year < 100 ? 2000 + year : year;
+      
+      const date = new Date(fullYear, month - 1, day);
       if (!isNaN(date.getTime())) {
-        data.deadline = date.toISOString().split("T")[0];
+        data.deadline = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
       }
     } catch (e) {
       console.warn("Failed to parse date:", wantedByMatch[1]);
-      // Use a default deadline (2 weeks from now) if date parsing fails
+      // Use default (2 weeks from now)
       data.deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
     }
   } else {
-    // Fallback to other date formats if wanted by not found
-    const dateMatch =
-      normalizedText.match(
-        /deadline[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i,
-      ) ||
-      normalizedText.match(/due[:\s]+(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i) ||
-      normalizedText.match(/(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})/i);
-    if (dateMatch && dateMatch[1]) {
-      try {
-        // Attempt to parse the date
-        const dateParts = dateMatch[1].split(/[\/\-]/);
-        let year, month, day;
-
-        // Handle different date formats (MM/DD/YYYY or DD/MM/YYYY)
-        if (dateParts[2].length === 4) {
-          // Assuming MM/DD/YYYY or DD/MM/YYYY
-          year = parseInt(dateParts[2]);
-          month = parseInt(dateParts[0]);
-          day = parseInt(dateParts[1]);
-
-          // Validate month (if > 12, assume DD/MM/YYYY format)
-          if (month > 12) {
-            day = parseInt(dateParts[0]);
-            month = parseInt(dateParts[1]);
-          }
-        } else {
-          // Assuming MM/DD/YY or DD/MM/YY
-          year = 2000 + parseInt(dateParts[2]); // Assume 20xx for 2-digit years
-          month = parseInt(dateParts[0]);
-          day = parseInt(dateParts[1]);
-
-          // Validate month (if > 12, assume DD/MM/YY format)
-          if (month > 12) {
-            day = parseInt(dateParts[0]);
-            month = parseInt(dateParts[1]);
-          }
-        }
-
-        // Create date and format as YYYY-MM-DD for the form
-        const date = new Date(year, month - 1, day);
-        if (!isNaN(date.getTime())) {
-          data.deadline = date.toISOString().split("T")[0];
-        }
-      } catch (e) {
-        console.warn("Failed to parse date:", dateMatch[1]);
-        // Use a default deadline (2 weeks from now) if date parsing fails
-        data.deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .split("T")[0];
-      }
-    } else {
-      // Default deadline (2 weeks from now)
-      data.deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
-    }
+    // Default deadline (2 weeks from now)
+    data.deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
   }
 
-  // Extract priority (look for "priority:" followed by level)
-  const priorityMatch = normalizedText.match(/priority[:\s]+(\w+)/i);
-  if (priorityMatch && priorityMatch[1]) {
-    const priority = priorityMatch[1].toLowerCase();
-    if (priority.includes("high") || priority.includes("urgent")) {
-      data.priority = "high";
-    } else if (priority.includes("med")) {
-      data.priority = "medium";
-    } else if (priority.includes("low")) {
-      data.priority = "low";
-    } else {
-      data.priority = "medium"; // Default
-    }
+  // Try to extract urgency from text to determine priority
+  if (normalizedText.includes("rush") || 
+      normalizedText.includes("urgent") || 
+      normalizedText.includes("asap")) {
+    data.priority = "high";
   } else {
-    data.priority = "medium"; // Default
+    // Default to medium priority
+    data.priority = "medium";
   }
 
-  // Extract estimated hours (look for "hours:" or "estimated:")
-  const hoursMatch =
-    normalizedText.match(/hours[:\s]+(\d+(\.\d+)?)/i) ||
-    normalizedText.match(/estimated[:\s]+(\d+(\.\d+)?)/i);
-  if (hoursMatch && hoursMatch[1]) {
-    data.estimatedHours = parseFloat(hoursMatch[1]);
+  // Extract estimated hours from time-related fields
+  // Look for times in the job ticket form
+  const totalTimeMatch = 
+    normalizedText.match(/total\s+time\s*:?\s*(\d+\.?\d*)/i) ||
+    normalizedText.match(/run\s+time\s*:?\s*(\d+\.?\d*)/i);
+  
+  if (totalTimeMatch && totalTimeMatch[1]) {
+    const hours = parseFloat(totalTimeMatch[1]);
+    data.estimatedHours = hours > 0 ? hours : 1;
   } else {
-    data.estimatedHours = 2; // Default
+    // Default estimated hours (based on industry standards)
+    data.estimatedHours = 2;
   }
 
-  // Extract notes or additional information
-  const notesMatch =
-    normalizedText.match(/notes[:\s]+(\w[\w\s,.]+?)(?:\s{2,}|$)/i) ||
-    normalizedText.match(/comments[:\s]+(\w[\w\s,.]+?)(?:\s{2,}|$)/i);
-  if (notesMatch && notesMatch[1]) {
-    data.notes = notesMatch[1].trim();
-  } else {
+  // Compile additional notes from the PDF
+  let notes = [];
+  
+  // Add important details to notes if available
+  const qtyMatch = normalizedText.match(/ordered\s+qty\s*:?\s*(\d[\d,]+)/i);
+  if (qtyMatch && qtyMatch[1]) {
+    notes.push(`Quantity: ${qtyMatch[1].replace(/,/g, '')}`);
+  }
+  
+  const stockMatch = normalizedText.match(/stock\s*:?\s*([a-z0-9#\s]+(?:cover|text|paper)[\w\s]+\d+\s*x\s*\d+)/i);
+  if (stockMatch && stockMatch[1]) {
+    notes.push(`Stock: ${stockMatch[1].trim()}`);
+  }
+  
+  const colorMatch = normalizedText.match(/color\s*:?\s*([a-z\s]+)/i);
+  if (colorMatch && colorMatch[1]) {
+    notes.push(`Color: ${colorMatch[1].trim()}`);
+  }
+  
+  const sizeMatch = normalizedText.match(/finish\s+size\s*:?\s*([0-9.]+\s*x\s*[0-9.]+)/i);
+  if (sizeMatch && sizeMatch[1]) {
+    notes.push(`Size: ${sizeMatch[1].trim()}`);
+  }
+  
+  // Add production notes
+  if (notes.length > 0) {
+    data.notes = notes.join(' | ');
+  } else if (!data.notes) {
     data.notes = `Extracted from ${fileName}. Some fields may need manual review.`;
   }
 
@@ -289,38 +343,41 @@ function parseJobDataFromText(
  * @param file The PDF file to parse
  * @returns A promise that resolves to the extracted job data
  */
-export async function parsePdfJobTicket(file: File): Promise<ExtractedJobData> {
+export const parsePdfJobTicket = async (file: File): Promise<ExtractedJobData> => {
   console.log(`Starting PDF parsing for file: ${file.name}`);
-
+  
   try {
     // Extract text from the PDF
-    const extractedText = await extractTextFromPdf(file);
-    console.log("Text extraction complete, parsing job data...");
-
-    // Parse job data from the extracted text
-    const jobData = parseJobDataFromText(extractedText, file.name);
-    console.log("Job data parsed successfully:", jobData);
-
-    return jobData;
+    const text = await extractTextFromPdf(file);
+    console.log("Text extraction complete. Length:", text.length);
+    
+    try {
+      // Parse job data from the extracted text
+      const jobData = parseJobDataFromText(text, file.name);
+      console.log("Extracted job data:", jobData);
+      return jobData;
+    } catch (parseError) {
+      console.error("PDF parsing error:", parseError);
+      // Return fallback data based on the filename
+      const filename = file.name.split(".")[0];
+      return {
+        title: filename,
+        priority: "medium",
+        estimatedHours: 1,
+        deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 2 weeks from now
+        notes: "Failed to extract detailed data from PDF. Please fill in the details manually."
+      };
+    }
   } catch (error) {
-    console.error("PDF parsing failed:", error);
-
-    // Return fallback data based on filename
-    const fallbackData: ExtractedJobData = {
-      title: file.name
-        .replace(/\.pdf$/i, "")
-        .replace(/[-_]/g, " ")
-        .toUpperCase(),
-      client: "",
-      description: "",
+    console.error("PDF text extraction error:", error);
+    // Return fallback data if extraction fails completely
+    const filename = file.name.split(".")[0];
+    return {
+      title: filename,
       priority: "medium",
-      estimatedHours: 2,
-      notes: `Failed to extract data from PDF. Please fill in the details manually.`,
-      deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0], // 2 weeks from now
+      estimatedHours: 1,
+      deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 2 weeks from now
+      notes: "Could not read the PDF file. Please fill in the details manually."
     };
-
-    return fallbackData;
   }
-}
+};

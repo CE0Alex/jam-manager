@@ -1,9 +1,21 @@
-export type JobType =
-  | "embroidery"
-  | "screen_printing"
-  | "digital_printing"
-  | "wide_format"
-  | "central_facility";
+import type { ScheduleConflict } from "@/lib/scheduling/conflictDetection";
+export type { ScheduleConflict };
+
+export interface AutoScheduleOptions {
+  preferredStaffId?: string;
+  preferredDate?: Date;
+  ignoreConflicts?: boolean;
+  maxSuggestions?: number;
+  daysToCheck?: number;
+}
+
+export type JobType = string;
+
+export interface JobTypeDefinition {
+  id: string;
+  name: string;
+  description?: string;
+};
 
 export interface Job {
   id: string;
@@ -30,7 +42,8 @@ export type JobStatus =
   | "in_progress"
   | "review"
   | "completed"
-  | "cancelled";
+  | "cancelled"
+  | "archived";
 export type JobPriority = "low" | "medium" | "high" | "urgent";
 
 export interface StaffMember {
@@ -40,6 +53,7 @@ export interface StaffMember {
   email: string;
   phone?: string;
   skills: string[];
+  jobTypeCapabilities: JobType[];
   availability: {
     monday: boolean;
     tuesday: boolean;
@@ -104,3 +118,4 @@ export interface DashboardMetrics {
 }
 
 export * from "./machine";
+export * from "./settings";

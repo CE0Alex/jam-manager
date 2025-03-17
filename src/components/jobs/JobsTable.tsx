@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import StaffAvatar from "../staff/StaffAvatar";
+import CreateJobDialog from "./CreateJobDialog";
 
 interface JobsTableProps {
   jobs?: Job[];
@@ -30,6 +31,9 @@ interface JobsTableProps {
   onEditJob?: (jobId: string) => void;
   onDeleteJob?: (jobId: string) => void;
   onAssignJob?: (jobId: string) => void;
+  onArchiveJob?: (jobId: string) => void;
+  onCreateJob?: () => void;
+  onSelectionChange?: (selectedIds: string[]) => void;
 }
 
 type SortField =
@@ -47,11 +51,15 @@ const JobsTable = ({
   onEditJob = () => {},
   onDeleteJob = () => {},
   onAssignJob = () => {},
+  onArchiveJob = () => {},
+  onCreateJob,
+  onSelectionChange,
 }: JobsTableProps) => {
   const navigate = useNavigate();
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
   const [sortField, setSortField] = useState<SortField>("deadline");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -92,18 +100,21 @@ const JobsTable = ({
   });
 
   const toggleSelectAll = () => {
-    if (selectedJobs.length === jobs.length) {
-      setSelectedJobs([]);
-    } else {
-      setSelectedJobs(jobs.map((job) => job.id));
+    const newSelection = selectedJobs.length === jobs.length ? [] : jobs.map((job) => job.id);
+    setSelectedJobs(newSelection);
+    if (onSelectionChange) {
+      onSelectionChange(newSelection);
     }
   };
 
   const toggleSelectJob = (jobId: string) => {
-    if (selectedJobs.includes(jobId)) {
-      setSelectedJobs(selectedJobs.filter((id) => id !== jobId));
-    } else {
-      setSelectedJobs([...selectedJobs, jobId]);
+    const newSelection = selectedJobs.includes(jobId)
+      ? selectedJobs.filter((id) => id !== jobId)
+      : [...selectedJobs, jobId];
+    
+    setSelectedJobs(newSelection);
+    if (onSelectionChange) {
+      onSelectionChange(newSelection);
     }
   };
 
@@ -116,6 +127,15 @@ const JobsTable = ({
     );
   };
 
+  const handleCreateJob = () => {
+    if (onCreateJob) {
+      onCreateJob();
+    } else {
+      setIsCreateDialogOpen(true);
+    }
+    console.log("Create job button clicked");
+  };
+
   return (
     <div className="w-full bg-white rounded-md border">
       {jobs.length === 0 ? (
@@ -123,10 +143,6 @@ const JobsTable = ({
           <p className="text-muted-foreground mb-4">
             No jobs found. Create a new job to get started.
           </p>
-          <Button onClick={() => navigate("/jobs/new")}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create New Job
-          </Button>
         </div>
       ) : (
         <Table>
@@ -238,6 +254,9 @@ const JobsTable = ({
                       <DropdownMenuItem onClick={() => onAssignJob(job.id)}>
                         Assign Staff
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onArchiveJob(job.id)}>
+                        Archive Job
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive"
                         onClick={() => onDeleteJob(job.id)}
@@ -252,6 +271,11 @@ const JobsTable = ({
           </TableBody>
         </Table>
       )}
+      <CreateJobDialog
+        open={isCreateDialogOpen}
+        triggerButton={false}
+        onOpenChange={setIsCreateDialogOpen}
+      />
     </div>
   );
 };

@@ -3,60 +3,89 @@ import { supabase } from "./supabase";
 /**
  * Upload a file to Supabase storage
  * @param file The file to upload
- * @param bucket The storage bucket name (default: 'job-files')
- * @param path Optional path within the bucket
- * @returns URL of the uploaded file or null if upload failed
+ * @returns The URL of the uploaded file, or null if the upload failed
  */
-export async function uploadFile(
-  file: File,
-  bucket: string = "job-files",
-  path?: string,
-): Promise<string | null> {
+export async function uploadFile(file: File): Promise<string | null> {
   try {
-    // Create a unique file name to avoid collisions
-    const fileExt = file.name.split(".").pop() || "pdf";
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-    const filePath = path ? `${path}/${fileName}` : fileName;
-
-    console.log(`Uploading file to ${bucket}/${filePath}`);
-
-    // Upload the file to Supabase storage
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-
-    if (error) {
-      console.error("Error uploading file to Supabase:", error);
-
-      // Always use blob URL as fallback in case of any error
-      console.log("Upload failed, using blob URL as fallback");
-      try {
-        return URL.createObjectURL(file);
-      } catch (blobError) {
-        console.error("Failed to create blob URL:", blobError);
-        return null;
-      }
+    // First check if Supabase is available
+    if (!isSupabaseAvailable()) {
+      // Create and return a blob URL as fallback
+      return createAndTrackBlobUrl(file);
     }
 
-    // Get the public URL for the file
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(bucket).getPublicUrl(filePath);
-
-    console.log("File uploaded successfully, public URL:", publicUrl);
-    return publicUrl;
+    // First, create a filename that avoids collisions
+    const fileExtension = file.name.split('.').pop() || '';
+    const safeFileName = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}.${fileExtension}`;
+    
+    // Upload to Supabase
+    const { data, error } = await supabase.storage
+      .from('job-files')
+      .upload(safeFileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+    
+    if (error) {
+      console.error("Error uploading file to Supabase:", error);
+      // Fallback to local blob URL if Supabase upload fails
+      return createAndTrackBlobUrl(file);
+    }
+    
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+      .from('job-files')
+      .getPublicUrl(data?.path || safeFileName);
+    
+    return urlData.publicUrl;
   } catch (error) {
     console.error("Error in uploadFile:", error);
-    // Create a blob URL as fallback if Supabase upload fails
+    // Fallback to local blob URL
     try {
-      return URL.createObjectURL(file);
+      return createAndTrackBlobUrl(file);
     } catch (blobError) {
       console.error("Failed to create blob URL:", blobError);
       return null;
     }
+  }
+}
+
+/**
+ * Create a blob URL for a file and track it for later cleanup
+ * @param file The file to create a blob URL for
+ * @returns The blob URL
+ */
+function createAndTrackBlobUrl(file: File): string {
+  const blobUrl = URL.createObjectURL(file);
+  
+  // Store this URL so we can revoke it later if needed
+  const existingUrls = JSON.parse(localStorage.getItem('blobUrls') || '[]');
+  existingUrls.push({
+    url: blobUrl,
+    created: new Date().toISOString(),
+    filename: file.name
+  });
+  localStorage.setItem('blobUrls', JSON.stringify(existingUrls));
+  
+  return blobUrl;
+}
+
+/**
+ * Check if Supabase is available for storage operations
+ */
+function isSupabaseAvailable(): boolean {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.warn("Supabase configuration missing, using local storage fallback");
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error checking Supabase availability:", error);
+    return false;
   }
 }
 

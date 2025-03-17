@@ -4,7 +4,12 @@ import JobsView from "../jobs/JobsView";
 import ScheduleView from "../schedule/ScheduleView";
 import StaffView from "../staff/StaffView";
 
-export type ContentView = "dashboard" | "jobs" | "schedule" | "staff";
+export type ContentView =
+  | "dashboard"
+  | "jobs"
+  | "schedule"
+  | "staff"
+  | "reports";
 
 interface MainContentProps {
   activeView?: ContentView;

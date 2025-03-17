@@ -20,18 +20,15 @@ import {
   Clock,
   Layers,
   BarChart2,
-  FileText,
 } from "lucide-react";
 import ProductionReport from "./ProductionReport";
 import StaffPerformanceReport from "./StaffPerformanceReport";
-import FinancialReport from "./FinancialReport";
-import SalesReport from "./SalesReport";
 import ComprehensiveDashboard from "./ComprehensiveDashboard";
 
 export default function ReportsView() {
   const { jobs, staff, schedule } = useAppContext();
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "production" | "staff" | "capacity" | "financial" | "sales"
+    "dashboard" | "production" | "staff" | "capacity"
   >("dashboard");
   const [dateRange, setDateRange] = useState<
     "week" | "month" | "quarter" | "year"
@@ -137,14 +134,6 @@ export default function ReportsView() {
             <Layers className="h-4 w-4" />
             Capacity
           </TabsTrigger>
-          <TabsTrigger value="financial" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Financial
-          </TabsTrigger>
-          <TabsTrigger value="sales" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Sales
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">
@@ -161,14 +150,6 @@ export default function ReportsView() {
 
         <TabsContent value="capacity">
           <CapacityAnalysisReport startDate={startDate} endDate={endDate} />
-        </TabsContent>
-
-        <TabsContent value="financial">
-          <FinancialReport startDate={startDate} endDate={endDate} />
-        </TabsContent>
-
-        <TabsContent value="sales">
-          <SalesReport startDate={startDate} endDate={endDate} />
         </TabsContent>
       </Tabs>
     </div>

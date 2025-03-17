@@ -6,12 +6,14 @@ import JobsFilter from "./JobsFilter";
 import JobsTable from "./JobsTable";
 import { Job, JobStatus, JobPriority } from "@/types";
 import { useAppContext } from "@/context/AppContext";
+import CreateJobDialog from "./CreateJobDialog";
 
 interface JobsViewProps {
   jobs?: Job[];
+  onCreateJob?: () => void;
 }
 
-const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
+const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs, onCreateJob }) => {
   const navigate = useNavigate();
   const {
     jobs: contextJobs,
@@ -19,6 +21,9 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
     deleteJob,
     setJobFilters,
   } = useAppContext();
+  
+  // State for dialog
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   // Use provided jobs or fall back to context
   const allJobs = propJobs || contextJobs;
@@ -45,6 +50,15 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
     setJobFilters(filters);
   };
 
+  const handleCreateJob = () => {
+    if (onCreateJob) {
+      onCreateJob();
+    } else {
+      // Instead of navigating, open the dialog
+      setDialogOpen(true);
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-center mb-6">
@@ -54,7 +68,8 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
             View and manage all print jobs in your system
           </p>
         </div>
-        <Button onClick={() => navigate("/jobs/new")}>
+        {/* Use the Button to trigger the dialog */}
+        <Button onClick={handleCreateJob}>
           <Plus className="h-4 w-4 mr-2" />
           Create New Job
         </Button>
@@ -69,6 +84,13 @@ const JobsView: React.FC<JobsViewProps> = ({ jobs: propJobs }) => {
         onViewJob={handleViewJob}
         onEditJob={handleEditJob}
         onDeleteJob={handleDeleteJob}
+        onCreateJob={handleCreateJob}
+      />
+
+      {/* Add the CreateJobDialog component */}
+      <CreateJobDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen}
       />
     </div>
   );

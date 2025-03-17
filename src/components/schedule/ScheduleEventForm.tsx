@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { ScheduleEvent } from "@/types";
+import { toast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { format } from "date-fns";
+import { format, addHours } from "date-fns";
 
 interface ScheduleEventFormProps {
   event?: ScheduleEvent;
@@ -32,7 +33,7 @@ export default function ScheduleEventForm({
   isEditing = false,
 }: ScheduleEventFormProps) {
   const navigate = useNavigate();
-  const { addScheduleEvent, updateScheduleEvent, jobs, staff } =
+  const { addScheduleEvent, updateScheduleEvent, jobs, staff, schedule } =
     useAppContext();
 
   // Format date and time for input fields
@@ -49,26 +50,22 @@ export default function ScheduleEventForm({
     staffId: string;
     startDate: string;
     startTime: string;
-    endDate: string;
-    endTime: string;
     notes: string;
   }>({
     jobId: "",
     staffId: "",
     startDate: format(new Date(), "yyyy-MM-dd"),
     startTime: "09:00",
-    endDate: format(new Date(), "yyyy-MM-dd"),
-    endTime: "10:30",
     notes: "",
   });
+
+  // Selected job for duration calculation
+  const [selectedJob, setSelectedJob] = useState<any>(null);
 
   useEffect(() => {
     if (event && isEditing) {
       const { date: startDate, time: startTime } = formatDateTimeForInput(
         event.startTime,
-      );
-      const { date: endDate, time: endTime } = formatDateTimeForInput(
-        event.endTime,
       );
 
       setFormData({
@@ -76,12 +73,28 @@ export default function ScheduleEventForm({
         staffId: event.staffId || "",
         startDate,
         startTime,
-        endDate,
-        endTime,
         notes: event.notes || "",
       });
+
+      // Find the job to get its estimated hours
+      const job = jobs.find((j) => j.id === event.jobId);
+      if (job) {
+        setSelectedJob(job);
+      }
     }
-  }, [event, isEditing]);
+  }, [event, isEditing, jobs]);
+
+  // Update selected job when jobId changes
+  useEffect(() => {
+    if (formData.jobId) {
+      const job = jobs.find((j) => j.id === formData.jobId);
+      if (job) {
+        setSelectedJob(job);
+      }
+    } else {
+      setSelectedJob(null);
+    }
+  }, [formData.jobId, jobs]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -94,12 +107,57 @@ export default function ScheduleEventForm({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const calculateEndTime = () => {
+    if (!selectedJob || !formData.startDate || !formData.startTime) {
+      return { endDate: formData.startDate, endTime: formData.startTime };
+    }
+
+    const estimatedHours = selectedJob.estimatedHours || 1;
+    const startDateTime = new Date(
+      `${formData.startDate}T${formData.startTime}:00`,
+    );
+    const endDateTime = addHours(startDateTime, estimatedHours);
+
+    return {
+      endDate: format(endDateTime, "yyyy-MM-dd"),
+      endTime: format(endDateTime, "HH:mm"),
+    };
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!selectedJob) {
+      toast({
+        title: "Job Required",
+        description: "Please select a job to schedule",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Combine date and time into ISO strings
     const startTime = `${formData.startDate}T${formData.startTime}:00`;
-    const endTime = `${formData.endDate}T${formData.endTime}:00`;
+    const { endDate, endTime } = calculateEndTime();
+    const endTimeISO = `${endDate}T${endTime}:00`;
+
+    // Check if this time slot is available for the staff member
+    const isSlotAvailable = checkStaffAvailability(
+      formData.staffId,
+      new Date(startTime),
+      new Date(endTimeISO),
+      event?.id,
+    );
+
+    if (!isSlotAvailable) {
+      toast({
+        title: "Scheduling Conflict",
+        description:
+          "This staff member is already scheduled during this time period.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (isEditing && event) {
       updateScheduleEvent({
@@ -107,7 +165,7 @@ export default function ScheduleEventForm({
         jobId: formData.jobId,
         staffId: formData.staffId || undefined,
         startTime,
-        endTime,
+        endTime: endTimeISO,
         notes: formData.notes || undefined,
       });
       navigate(`/schedule`);
@@ -116,17 +174,46 @@ export default function ScheduleEventForm({
         jobId: formData.jobId,
         staffId: formData.staffId || undefined,
         startTime,
-        endTime,
+        endTime: endTimeISO,
         notes: formData.notes || undefined,
       });
       navigate("/schedule");
     }
   };
 
+  // Check if a staff member is available during the specified time period
+  const checkStaffAvailability = (
+    staffId: string,
+    startTime: Date,
+    endTime: Date,
+    currentEventId?: string,
+  ) => {
+    if (!staffId) return true; // If no staff assigned, no conflict
+
+    // Get all events for this staff member
+    const staffEvents = schedule.filter(
+      (event) =>
+        event.staffId === staffId &&
+        (!currentEventId || event.id !== currentEventId), // Exclude current event when editing
+    );
+
+    // Check for time conflicts
+    return !staffEvents.some((event) => {
+      const eventStart = new Date(event.startTime);
+      const eventEnd = new Date(event.endTime);
+
+      // Check if there's an overlap
+      return startTime < eventEnd && endTime > eventStart;
+    });
+  };
+
   // Filter out completed and cancelled jobs
   const availableJobs = jobs.filter(
     (job) => job.status !== "completed" && job.status !== "cancelled",
   );
+
+  // Calculate end time for display
+  const { endDate, endTime } = calculateEndTime();
 
   return (
     <form onSubmit={handleSubmit}>
@@ -155,7 +242,7 @@ export default function ScheduleEventForm({
                 ) : (
                   availableJobs.map((job) => (
                     <SelectItem key={job.id} value={job.id}>
-                      {job.title}
+                      {job.title} ({job.estimatedHours}h)
                     </SelectItem>
                   ))
                 )}
@@ -225,45 +312,25 @@ export default function ScheduleEventForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="endDate">End Date *</Label>
-              <Input
-                id="endDate"
-                name="endDate"
-                type="date"
-                value={formData.endDate}
-                onChange={handleChange}
-                required
-              />
+          {selectedJob && (
+            <div className="p-4 bg-blue-50 rounded-md">
+              <h3 className="font-medium mb-2">Calculated Schedule</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-500">Start:</span>{" "}
+                  {formData.startDate} at {formData.startTime}
+                </div>
+                <div>
+                  <span className="text-gray-500">End:</span> {endDate} at{" "}
+                  {endTime}
+                </div>
+                <div className="md:col-span-2">
+                  <span className="text-gray-500">Duration:</span>{" "}
+                  {selectedJob.estimatedHours} hour(s) based on job estimate
+                </div>
+              </div>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="endTime">End Time *</Label>
-              <Select
-                value={formData.endTime}
-                onValueChange={(value) => handleSelectChange("endTime", value)}
-                required
-              >
-                <SelectTrigger id="endTime">
-                  <SelectValue placeholder="End time" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 19 }, (_, i) => {
-                    const hour = Math.floor(i / 2) + 8;
-                    const minute = i % 2 === 0 ? "00" : "30";
-                    const time = `${hour.toString().padStart(2, "0")}:${minute}`;
-                    const displayTime = `${hour > 12 ? hour - 12 : hour}:${minute} ${hour >= 12 ? "PM" : "AM"}`;
-                    return (
-                      <SelectItem key={time} value={time}>
-                        {displayTime}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>

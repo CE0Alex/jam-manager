@@ -49,41 +49,59 @@ export async function initializeStorage() {
   }
 
   try {
-    console.log("Initializing Supabase storage buckets...");
+    // Use a timeout to prevent hanging if the request takes too long
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Storage initialization timed out")),
+        5000,
+      );
+    });
 
-    // Check if the job-files bucket exists, create it if it doesn't
-    const { data: buckets, error } = await supabase.storage.listBuckets();
+    const initPromise = (async () => {
+      console.log("Initializing Supabase storage...");
 
-    if (error) {
-      console.error("Error checking storage buckets:", error);
-      return;
-    }
+      // Check if the job-files bucket exists, create it if it doesn't
+      const { data: buckets, error } = await supabase.storage.listBuckets();
 
-    console.log("Available buckets:", buckets?.map((b) => b.name) || "none");
+      if (error) {
+        console.error("Error checking storage buckets:", error);
+        return;
+      }
 
-    const jobFilesBucketExists = buckets?.some(
-      (bucket) => bucket.name === "job-files",
-    );
+      console.log("Available buckets:", buckets?.map((b) => b.name) || "none");
 
-    if (!jobFilesBucketExists) {
-      console.log("Creating job-files bucket...");
-      const { error: createError } = await supabase.storage.createBucket(
-        "job-files",
-        {
-          public: true, // Files are publicly accessible
-          fileSizeLimit: 10485760, // 10MB limit
-        },
+      const jobFilesBucketExists = buckets?.some(
+        (bucket) => bucket.name === "job-files",
       );
 
-      if (createError) {
-        console.error("Error creating job-files bucket:", createError);
+      if (!jobFilesBucketExists) {
+        console.log("Creating job-files bucket...");
+        // Disable RLS check for bucket creation in development environment
+        const { error: createError } = await supabase.storage.createBucket(
+          "job-files",
+          {
+            public: true, // Files are publicly accessible
+            fileSizeLimit: 10485760, // 10MB limit
+          },
+        );
+
+        if (createError) {
+          console.error("Error creating job-files bucket:", createError);
+          console.log(
+            "Continuing despite bucket creation error - this is expected in some environments",
+          );
+        } else {
+          console.log("Created job-files storage bucket successfully");
+        }
       } else {
-        console.log("Created job-files storage bucket successfully");
+        console.log("job-files bucket already exists");
       }
-    } else {
-      console.log("job-files bucket already exists");
-    }
+    })();
+
+    // Race between the initialization and the timeout
+    await Promise.race([initPromise, timeoutPromise]);
   } catch (error) {
     console.error("Error initializing storage:", error);
+    console.log("Continuing despite storage initialization error");
   }
 }

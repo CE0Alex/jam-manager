@@ -10,6 +10,12 @@ import { format, addDays, isSameDay } from "date-fns";
 import { Link } from "react-router-dom";
 import { Calendar, Clock, AlertTriangle, CheckCircle, User, Filter } from "lucide-react";
 import { StaffMember, Job } from "@/types";
+import { cn } from "@/lib/utils";
+
+// Helper function to format numbers
+const formatNumber = (num: number): string => {
+  return num.toFixed(1);
+};
 
 interface WorkloadDashboardProps {
   initialView?: "list" | "calendar" | "metrics";
@@ -297,12 +303,121 @@ export default function WorkloadDashboard({
       };
     });
     
+    // Calculate total allocated hours and capacity
+    const totalAllocatedHours = staff.reduce((total, staffMember) => {
+      const staffEvents = schedule.filter(event => event.staffId === staffMember.id);
+      const hours = staffEvents.reduce((sum, event) => {
+        const startTime = new Date(event.startTime);
+        const endTime = new Date(event.endTime);
+        const durationMs = endTime.getTime() - startTime.getTime();
+        const durationHours = durationMs / (1000 * 60 * 60);
+        return sum + durationHours;
+      }, 0);
+      return total + hours;
+    }, 0);
+    
+    const totalCapacity = staff.reduce((total, staffMember) => {
+      const workDaysPerWeek = Object.values(staffMember.availability).filter(Boolean).length;
+      const dailyCapacity = 8; // 8 hours per day
+      const weeklyCapacity = workDaysPerWeek * dailyCapacity;
+      return total + weeklyCapacity;
+    }, 0);
+    
+    // Mock data for team members display
+    const staffMembers = staff.map(s => ({
+      id: s.id,
+      name: s.name,
+      profilePic: `https://api.dicebear.com/7.x/avataaars/svg?seed=${s.id}`
+    }));
+    
     return (
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Overall Performance</CardTitle>
+            <CardTitle>Team Workload Summary</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-
+              <div className="space-y-2">
+                <h3 className="text-lg font-medium">Overall Capacity</h3>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Allocated Hours vs. Capacity
+                  </span>
+                  <span className="text-sm font-medium">
+                    {formatNumber(totalAllocatedHours)}/{formatNumber(totalCapacity)} hrs
+                  </span>
+                </div>
+                <Progress 
+                  value={Math.min((totalAllocatedHours / totalCapacity) * 100, 100)} 
+                  className="h-2"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-lg font-medium">Team Utilization</h3>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Current Utilization
+                  </span>
+                  <span className="text-sm font-medium">
+                    {formatNumber((totalAllocatedHours / totalCapacity) * 100)}%
+                  </span>
+                </div>
+                <Progress 
+                  value={Math.min((totalAllocatedHours / totalCapacity) * 100, 100)} 
+                  className={cn(
+                    "h-2",
+                    (totalAllocatedHours / totalCapacity) > 0.9 ? "text-red-500" : "text-green-500"
+                  )}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-lg font-medium">Team Members</h3>
+                <div className="flex items-center">
+                  <div className="flex -space-x-2">
+                    {staffMembers.slice(0, 5).map((staff, index) => (
+                      <Avatar key={index} className="border-2 border-background">
+                        <AvatarImage src={staff.profilePic} alt={staff.name} />
+                        <AvatarFallback>{getInitials(staff.name)}</AvatarFallback>
+                      </Avatar>
+                    ))}
+                  </div>
+                  {staffMembers.length > 5 && (
+                    <Badge variant="outline" className="ml-2">
+                      +{staffMembers.length - 5} more
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* rest of the component */}
+      </div>
+    );
+  };
+
+  return (
+    <Tabs defaultValue="item-1" className="w-full">
+      <TabsList className="grid w-full grid-cols-3">
+        <TabsTrigger value="item-1">List</TabsTrigger>
+        <TabsTrigger value="item-2">Calendar</TabsTrigger>
+        <TabsTrigger value="item-3">Metrics</TabsTrigger>
+      </TabsList>
+      <TabsContent value="item-1">
+        {renderListView()}
+      </TabsContent>
+      <TabsContent value="item-2">
+        {renderCalendarView()}
+      </TabsContent>
+      <TabsContent value="item-3">
+        {renderMetricsView()}
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+// ... existing code ...

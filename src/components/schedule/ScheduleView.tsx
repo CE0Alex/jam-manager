@@ -1,40 +1,70 @@
-import React, { useState } from "react";
-import ProductionCalendar from "./ProductionCalendar";
-import CapacityManager from "./CapacityManager";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import { useAppContext } from "@/context/AppContext";
+import ProductionCalendar from "./ProductionCalendar.fixed";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Sliders } from "lucide-react";
+import { Calendar } from "lucide-react";
+import { addDays, format, isWithinInterval, parseISO, startOfDay, endOfDay } from "date-fns";
+
+// Debug statement to confirm file is loaded
+console.log("ScheduleView component loaded successfully");
 
 interface ScheduleViewProps {
-  initialTab?: "calendar" | "capacity";
-  dailyCapacity?: number;
-  weeklyCapacity?: number;
-  currentUtilization?: number;
+  initialTab?: "calendar";
 }
 
 const ScheduleView = ({
   initialTab = "calendar",
-  dailyCapacity = 24,
-  weeklyCapacity = 120,
-  currentUtilization = 0,
 }: ScheduleViewProps) => {
-  const [activeTab, setActiveTab] = useState<"calendar" | "capacity">(
-    initialTab,
-  );
-  const [capacitySettings, setCapacitySettings] = useState({
-    daily: dailyCapacity,
-    weekly: weeklyCapacity,
-    utilization: currentUtilization,
-  });
-
-  const handleCapacityChange = (type: "daily" | "weekly", value: number) => {
-    setCapacitySettings((prev) => ({
-      ...prev,
-      [type]: value,
-    }));
-    // In a real application, this would likely make an API call to update settings
-    console.log(`Updated ${type} capacity to ${value} hours`);
-  };
+  const location = useLocation();
+  const { getJobById, jobs, schedule, staff } = useAppContext();
+  
+  // State to handle showing the production calendar dialog for a specific job
+  const [selectedJobForSchedule, setSelectedJobForSchedule] = useState<any>(null);
+  
+  // Calculate upcoming jobs (next 7 days)
+  const upcomingJobs = jobs.filter(job => {
+    const deadline = new Date(job.deadline);
+    const today = new Date();
+    const sevenDaysFromNow = addDays(today, 7);
+    
+    return deadline >= today && deadline <= sevenDaysFromNow;
+  }).length;
+  
+  // Calculate staff assigned to jobs
+  const staffAssigned = schedule.reduce((uniqueStaff, event) => {
+    if (event.staffId && !uniqueStaff.includes(event.staffId)) {
+      uniqueStaff.push(event.staffId);
+    }
+    return uniqueStaff;
+  }, [] as string[]).length;
+  
+  // Calculate today's jobs
+  const todaysJobs = schedule.filter(event => {
+    const eventDate = parseISO(event.startTime);
+    const today = new Date();
+    
+    return isWithinInterval(eventDate, {
+      start: startOfDay(today),
+      end: endOfDay(today)
+    });
+  }).length;
+  
+  // Check for state params from navigation - for schedule job button in job detail
+  useEffect(() => {
+    const state = location.state as { activeJob?: string; openScheduler?: boolean } | null;
+    
+    if (state?.activeJob && state?.openScheduler) {
+      const job = getJobById(state.activeJob);
+      if (job) {
+        // Set the job for scheduling
+        setSelectedJobForSchedule(job);
+        
+        // Clear the location state after using it
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location, getJobById]);
 
   return (
     <div className="container mx-auto p-4 space-y-6 bg-background">
@@ -43,43 +73,11 @@ const ScheduleView = ({
           Production Schedule
         </h1>
         <p className="text-muted-foreground">
-          Manage your production schedule and capacity settings
+          Manage your production schedule
         </p>
       </div>
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) =>
-          setActiveTab(value as "calendar" | "capacity")
-        }
-        className="w-full"
-      >
-        <div className="flex justify-between items-center mb-4">
-          <TabsList>
-            <TabsTrigger value="calendar" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Calendar View
-            </TabsTrigger>
-            <TabsTrigger value="capacity" className="flex items-center gap-2">
-              <Sliders className="h-4 w-4" />
-              Capacity Management
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent value="calendar" className="space-y-4">
-          <ProductionCalendar />
-        </TabsContent>
-
-        <TabsContent value="capacity" className="space-y-4">
-          <CapacityManager
-            dailyCapacity={capacitySettings.daily}
-            weeklyCapacity={capacitySettings.weekly}
-            currentUtilization={capacitySettings.utilization}
-            onCapacityChange={handleCapacityChange}
-          />
-        </TabsContent>
-      </Tabs>
+      <ProductionCalendar initialJob={selectedJobForSchedule} onScheduled={() => setSelectedJobForSchedule(null)} />
 
       <Card className="mt-6">
         <CardHeader>
@@ -89,23 +87,21 @@ const ScheduleView = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-primary/10 border">
               <h3 className="font-medium mb-2">Upcoming Jobs</h3>
-              <p className="text-2xl font-bold">12</p>
+              <p className="text-2xl font-bold">{upcomingJobs}</p>
               <p className="text-sm text-muted-foreground">Next 7 days</p>
             </div>
             <div className="p-4 rounded-lg bg-primary/10 border">
-              <h3 className="font-medium mb-2">Current Capacity</h3>
-              <p className="text-2xl font-bold">
-                {capacitySettings.utilization}%
-              </p>
+              <h3 className="font-medium mb-2">Staff Assigned</h3>
+              <p className="text-2xl font-bold">{staffAssigned}</p>
               <p className="text-sm text-muted-foreground">
-                Of total production hours
+                Across all scheduled jobs
               </p>
             </div>
             <div className="p-4 rounded-lg bg-primary/10 border">
-              <h3 className="font-medium mb-2">Staff Assigned</h3>
-              <p className="text-2xl font-bold">8</p>
+              <h3 className="font-medium mb-2">Today's Jobs</h3>
+              <p className="text-2xl font-bold">{todaysJobs}</p>
               <p className="text-sm text-muted-foreground">
-                Across all scheduled jobs
+                Scheduled for today
               </p>
             </div>
           </div>

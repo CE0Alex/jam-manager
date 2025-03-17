@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
-import { StaffMember } from "@/types";
+import { StaffMember, JobType } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,7 +34,7 @@ export default function StaffForm({
   isEditing = false,
 }: StaffFormProps) {
   const navigate = useNavigate();
-  const { addStaffMember, updateStaffMember } = useAppContext();
+  const { addStaffMember, updateStaffMember, settings, applyDefaultAvailabilityToStaff, jobTypes } = useAppContext();
 
   const [formData, setFormData] = useState<{
     name: string;
@@ -43,6 +43,7 @@ export default function StaffForm({
     phone: string;
     skills: string[];
     newSkill: string;
+    jobTypeCapabilities: JobType[];
     availability: {
       monday: boolean;
       tuesday: boolean;
@@ -68,6 +69,7 @@ export default function StaffForm({
     phone: "",
     skills: [],
     newSkill: "",
+    jobTypeCapabilities: [],
     availability: {
       monday: true,
       tuesday: true,
@@ -78,13 +80,13 @@ export default function StaffForm({
       sunday: false,
     },
     availabilityHours: {
-      monday: { start: "08:00", end: "17:00" },
-      tuesday: { start: "08:00", end: "17:00" },
-      wednesday: { start: "08:00", end: "17:00" },
-      thursday: { start: "08:00", end: "17:00" },
-      friday: { start: "08:00", end: "17:00" },
-      saturday: { start: "08:00", end: "17:00" },
-      sunday: { start: "08:00", end: "17:00" },
+      monday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      tuesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      wednesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      thursday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      friday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      saturday: { start: settings.businessHours.start, end: settings.businessHours.end },
+      sunday: { start: settings.businessHours.start, end: settings.businessHours.end },
     },
   });
 
@@ -101,15 +103,16 @@ export default function StaffForm({
         phone: staffMember.phone || "",
         skills: [...staffMember.skills],
         newSkill: "",
+        jobTypeCapabilities: staffMember.jobTypeCapabilities || [],
         availability: { ...staffMember.availability },
         availabilityHours: staffMember.availabilityHours || {
-          monday: { start: "08:00", end: "17:00" },
-          tuesday: { start: "08:00", end: "17:00" },
-          wednesday: { start: "08:00", end: "17:00" },
-          thursday: { start: "08:00", end: "17:00" },
-          friday: { start: "08:00", end: "17:00" },
-          saturday: { start: "08:00", end: "17:00" },
-          sunday: { start: "08:00", end: "17:00" },
+          monday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          tuesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          wednesday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          thursday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          friday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          saturday: { start: settings.businessHours.start, end: settings.businessHours.end },
+          sunday: { start: settings.businessHours.start, end: settings.businessHours.end },
         },
       });
     }
@@ -178,6 +181,24 @@ export default function StaffForm({
     }));
   };
 
+  const toggleJobTypeCapability = (jobTypeId: string) => {
+    setFormData((prev) => {
+      if (prev.jobTypeCapabilities.includes(jobTypeId)) {
+        // Remove the job type if it's already selected
+        return {
+          ...prev,
+          jobTypeCapabilities: prev.jobTypeCapabilities.filter(id => id !== jobTypeId)
+        };
+      } else {
+        // Add the job type if it's not already selected
+        return {
+          ...prev,
+          jobTypeCapabilities: [...prev.jobTypeCapabilities, jobTypeId]
+        };
+      }
+    });
+  };
+
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
 
@@ -214,6 +235,7 @@ export default function StaffForm({
         email: formData.email,
         phone: formData.phone || undefined,
         skills: formData.skills,
+        jobTypeCapabilities: formData.jobTypeCapabilities,
         availability: formData.availability,
         availabilityHours: formData.availabilityHours,
       });
@@ -225,6 +247,7 @@ export default function StaffForm({
         email: formData.email,
         phone: formData.phone || undefined,
         skills: formData.skills,
+        jobTypeCapabilities: formData.jobTypeCapabilities,
         availability: formData.availability,
         availabilityHours: formData.availabilityHours,
         assignedJobs: [],
@@ -336,44 +359,92 @@ export default function StaffForm({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Skills</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {formData.skills.map((skill) => (
-                <Badge
-                  key={skill}
-                  variant="secondary"
-                  className="flex items-center gap-1"
-                >
-                  {skill}
-                  <X
-                    className="h-3 w-3 cursor-pointer"
-                    onClick={() => removeSkill(skill)}
-                  />
-                </Badge>
-              ))}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Job Type Capabilities</Label>
+              <p className="text-sm text-muted-foreground">
+                Select the types of jobs this staff member can work on
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                {jobTypes.map((jobType) => (
+                  <div key={jobType.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`job-type-${jobType.id}`}
+                      checked={formData.jobTypeCapabilities.includes(jobType.id)}
+                      onCheckedChange={() => toggleJobTypeCapability(jobType.id)}
+                    />
+                    <Label htmlFor={`job-type-${jobType.id}`} className="cursor-pointer">
+                      {jobType.name}
+                    </Label>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add a skill"
-                value={formData.newSkill}
-                name="newSkill"
-                onChange={handleChange}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addSkill();
-                  }
-                }}
-              />
-              <Button type="button" size="icon" onClick={addSkill}>
-                <Plus className="h-4 w-4" />
-              </Button>
+
+            <div className="space-y-2">
+              <Label>Additional Skills</Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {formData.skills.map((skill) => (
+                  <Badge
+                    key={skill}
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
+                    {skill}
+                    <X
+                      className="h-3 w-3 cursor-pointer"
+                      onClick={() => removeSkill(skill)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add a skill"
+                  value={formData.newSkill}
+                  name="newSkill"
+                  onChange={handleChange}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addSkill();
+                    }
+                  }}
+                />
+                <Button type="button" size="icon" onClick={addSkill}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
           <div className="space-y-4">
-            <Label>Availability</Label>
+            <div className="flex justify-between items-center">
+              <Label>Availability</Label>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  // Apply business hours to all days that are enabled
+                  const updatedHours = { ...formData.availabilityHours };
+                  Object.keys(formData.availability).forEach(day => {
+                    if (formData.availability[day as keyof typeof formData.availability]) {
+                      updatedHours[day as keyof typeof updatedHours] = {
+                        start: settings.businessHours.start,
+                        end: settings.businessHours.end
+                      };
+                    }
+                  });
+                  setFormData(prev => ({
+                    ...prev,
+                    availabilityHours: updatedHours
+                  }));
+                }}
+              >
+                Apply Business Hours
+              </Button>
+            </div>
             <div className="space-y-4">
               {days.map((day) => (
                 <div key={day.key} className="flex items-center space-x-4">

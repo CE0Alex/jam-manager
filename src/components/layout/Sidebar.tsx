@@ -10,6 +10,9 @@ import {
   BarChart4,
   Menu,
   X,
+  Settings,
+  HelpCircle,
+  Bell,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -66,6 +69,24 @@ export default function Sidebar({ className = "" }: SidebarProps) {
     },
   ];
 
+  const utilityItems = [
+    {
+      name: "Settings",
+      path: "/settings",
+      icon: <Settings className="h-5 w-5" />,
+    },
+    {
+      name: "Notifications",
+      path: "/notifications",
+      icon: <Bell className="h-5 w-5" />,
+    },
+    {
+      name: "Help",
+      path: "/help",
+      icon: <HelpCircle className="h-5 w-5" />,
+    },
+  ];
+
   return (
     <div
       className={cn(
@@ -105,6 +126,33 @@ export default function Sidebar({ className = "" }: SidebarProps) {
             </li>
           ))}
         </ul>
+
+        {/* Utility Navigation */}
+        <div className="mt-8">
+          {!collapsed && (
+            <div className="px-4 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              System
+            </div>
+          )}
+          <ul className="space-y-1 px-2">
+            {utilityItems.map((item) => (
+              <li key={item.path}>
+                <Link to={item.path}>
+                  <Button
+                    variant={isActive(item.path) ? "secondary" : "ghost"}
+                    className={cn(
+                      "w-full justify-start",
+                      collapsed ? "justify-center px-2" : "px-4",
+                    )}
+                  >
+                    {item.icon}
+                    {!collapsed && <span className="ml-2">{item.name}</span>}
+                  </Button>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </nav>
 
       <div className="p-4 border-t">

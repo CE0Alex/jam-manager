@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import BulkScheduleActions from "./BulkScheduleActions";
 
 export default function EnhancedScheduleView() {
   const navigate = useNavigate();
-  const { schedule } = useAppContext();
+  const { schedule, jobs, autoScheduleJob } = useAppContext();
   const [activeTab, setActiveTab] = useState<
     "calendar" | "resources" | "machines"
   >("calendar");
@@ -52,6 +52,24 @@ export default function EnhancedScheduleView() {
     setSelectedEvents([]);
     setSelectedMachineId(null);
   };
+
+  // Auto-schedule unscheduled jobs when component mounts
+  useEffect(() => {
+    const unscheduledJobs = jobs.filter((job) => {
+      // Check if job is not completed or cancelled
+      if (job.status === "completed" || job.status === "cancelled")
+        return false;
+
+      // Check if job is already scheduled
+      const isScheduled = schedule.some((event) => event.jobId === job.id);
+      return !isScheduled;
+    });
+
+    // Auto-schedule each unscheduled job
+    unscheduledJobs.forEach((job) => {
+      autoScheduleJob(job.id);
+    });
+  }, []);
 
   return (
     <div className="container mx-auto p-4 space-y-6 bg-background">
