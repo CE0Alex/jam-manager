@@ -78,6 +78,28 @@ export default defineConfig({
       await fs.writeFile(tempConfigPath, tempConfigContent, 'utf8');
       console.log(`Created temporary build config at ${tempConfigPath}`);
       
+      // Fix the ScheduleView.js file - most important change
+      const scheduleViewPath = 'src/components/schedule/ScheduleView.js';
+      const scheduleViewBackupPath = 'src/components/schedule/ScheduleView.js.bak';
+      
+      try {
+        // Backup the original ScheduleView file
+        const scheduleViewContent = await fs.readFile(scheduleViewPath, 'utf8');
+        await fs.writeFile(scheduleViewBackupPath, scheduleViewContent, 'utf8');
+        console.log(`Backed up ${scheduleViewPath} to ${scheduleViewBackupPath}`);
+        
+        // Modify the file to use SimpleProductionCalendar directly
+        let modifiedContent = scheduleViewContent.replace(
+          `import ProductionCalendar from "./ProductionCalendar.fixed";`,
+          `import ProductionCalendar from "./SimpleProductionCalendar";`
+        );
+        
+        await fs.writeFile(scheduleViewPath, modifiedContent, 'utf8');
+        console.log(`Modified ${scheduleViewPath} to use SimpleProductionCalendar directly`);
+      } catch (err) {
+        console.error(`Error modifying ScheduleView: ${err.message}`);
+      }
+      
       // Create a temporary index file for schedule components
       const scheduleIndexPath = 'src/components/schedule/index.tsx';
       const scheduleIndexBackupPath = 'src/components/schedule/index.tsx.bak';
@@ -119,6 +141,21 @@ export default SimpleProductionCalendar;
     try {
       await fs.unlink(tempConfigPath);
       console.log(`Removed temporary config ${tempConfigPath}`);
+      
+      // Restore the ScheduleView file if it was backed up
+      const scheduleViewBackupPath = 'src/components/schedule/ScheduleView.js.bak';
+      const scheduleViewPath = 'src/components/schedule/ScheduleView.js';
+      
+      try {
+        const backupStats = await fs.stat(scheduleViewBackupPath);
+        if (backupStats.isFile()) {
+          await fs.copyFile(scheduleViewBackupPath, scheduleViewPath);
+          await fs.unlink(scheduleViewBackupPath);
+          console.log(`Restored ${scheduleViewPath} from backup`);
+        }
+      } catch (err) {
+        console.log(`No backup file to restore for ${scheduleViewPath}`);
+      }
       
       // Restore the schedule index file if it was backed up
       const scheduleIndexBackupPath = 'src/components/schedule/index.tsx.bak';
