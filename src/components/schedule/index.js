@@ -1,4 +1,4 @@
-export { default as ProductionCalendar } from './ProductionCalendar.fixed.js';
+export { default as ProductionCalendar } from './ProductionCalendar.fixed';
 export { default as ScheduleJobForm } from './ScheduleJobForm';
 export { default as ScheduleEventItem } from './ScheduleEventItem';
 export { default as AvailabilityCalendar } from './AvailabilityCalendar';
