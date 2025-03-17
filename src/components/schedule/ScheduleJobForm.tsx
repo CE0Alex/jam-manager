@@ -638,17 +638,23 @@ export default function ScheduleJobForm() {
                           });
                           
                           return filteredStaff.map((member) => (
-                            <SelectItem key={member.id} value={member.id}>
-                              {member.name}
-                            </SelectItem>
+                            // Only render SelectItem if member.id exists and is not an empty string
+                            member.id ? (
+                              <SelectItem key={member.id} value={member.id}>
+                                {member.name}
+                              </SelectItem>
+                            ) : null
                           ));
                         })()
                       ) : (
                         // If no job is selected, show all staff
                         staff.map((member) => (
-                          <SelectItem key={member.id} value={member.id}>
-                            {member.name}
-                          </SelectItem>
+                          // Only render SelectItem if member.id exists and is not an empty string
+                          member.id ? (
+                            <SelectItem key={member.id} value={member.id}>
+                              {member.name}
+                            </SelectItem>
+                          ) : null
                         ))
                       )}
                     </SelectContent>
@@ -707,6 +713,8 @@ export default function ScheduleJobForm() {
                           </SelectItem>
                         ) : (
                           getAvailableTimeSlots.map((time) => {
+                            // Skip empty time values
+                            if (!time) return null;
                             return (
                               <SelectItem key={time} value={time}>
                                 {formatTime12Hour(time)}
@@ -766,11 +774,15 @@ export default function ScheduleJobForm() {
                         <SelectValue placeholder="End time" />
                       </SelectTrigger>
                       <SelectContent>
-                        {generateTimeOptions(8, 23, false).map((time) => (
-                            <SelectItem key={time} value={time}>
-                              {formatTime12Hour(time)}
-                            </SelectItem>
-                          ))}
+                        {generateTimeOptions(8, 23, false).map((time) => {
+                            // Skip empty time values
+                            if (!time) return null;
+                            return (
+                              <SelectItem key={time} value={time}>
+                                {formatTime12Hour(time)}
+                              </SelectItem>
+                            );
+                          })}
                       </SelectContent>
                     </Select>
                     {validationErrors.endTime && (
