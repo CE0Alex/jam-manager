@@ -59,14 +59,12 @@ const ScheduleView = () => {
     
     // Simple render function - no dynamic components or complexity
     const renderCalendar = () => {
-        return (
-            <SimpleProductionCalendar
-                initialJob={selectedJobForSchedule}
-                initialDate={new Date()}
-                initialView="week"
-                onScheduled={() => setSelectedJobForSchedule(null)} 
-            />
-        );
+        return _jsx(SimpleProductionCalendar, {
+            initialJob: selectedJobForSchedule,
+            initialDate: new Date(),
+            initialView: "week",
+            onScheduled: () => setSelectedJobForSchedule(null)
+        });
     };
 
     return (_jsxs("div", { className: "container mx-auto p-4 space-y-6 bg-background", children: [
