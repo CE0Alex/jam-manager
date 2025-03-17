@@ -716,12 +716,14 @@ const ProductionCalendarFixed = (props) => {
                                 value: "unassigned",
                                 children: "Unassigned"
                               }),
-                              staff.map((staffMember) => (
-                                _jsx(SelectItem, {
-                                  value: staffMember.id,
-                                  children: staffMember.name
-                                }, staffMember.id)
-                              ))
+                              staff
+                                .filter(staffMember => staffMember.id) // Filter out staff with empty or undefined IDs
+                                .map((staffMember) => (
+                                  _jsx(SelectItem, {
+                                    value: staffMember.id,
+                                    children: staffMember.name
+                                  }, staffMember.id)
+                                ))
                             ]
                           })
                         ]
