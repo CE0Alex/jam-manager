@@ -34,6 +34,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'tempo-routes': path.resolve(__dirname, './src/tempo-routes-mock.js')
     },
   },
   build: {

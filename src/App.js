@@ -1,7 +1,14 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { Suspense, lazy, useState, useEffect } from "react";
 import { Routes, Route, useRoutes } from "react-router-dom";
-import routes from "tempo-routes";
+// Use a try-catch to safely import routes
+let routes = [];
+try {
+  routes = require("tempo-routes").default;
+} catch (e) {
+  console.warn("tempo-routes not available, using empty routes array");
+  routes = [];
+}
 import { AppProvider } from "./context/AppContext";
 import MainLayout from "./components/layout/MainLayout";
 import { Toaster } from "@/components/ui/toaster";
@@ -84,8 +91,11 @@ const DebugPanel = () => {
                                 }, className: "bg-yellow-500 text-white px-2 py-1 rounded text-xs", children: "Reset Job Types" })] })] }))] }));
 };
 function App() {
-    // Handle Tempo routes
-    const tempoRoutes = import.meta.env.VITE_TEMPO === "true" ? useRoutes(routes) : null;
+    // Handle Tempo routes safely
+    const tempoEnabled = typeof import.meta !== 'undefined' && 
+                        import.meta.env && 
+                        import.meta.env.VITE_TEMPO === "true";
+    const tempoRoutes = tempoEnabled ? useRoutes(routes) : null;
     return (_jsx(AppProvider, { children: _jsxs(ErrorBoundary, { children: [_jsxs(Suspense, { fallback: _jsxs("div", { className: "flex flex-col items-center justify-center h-screen", children: [_jsx("div", { className: "mb-4", children: "Loading application..." }), _jsxs("div", { className: "text-sm text-gray-500", children: ["If the application doesn't load within a few seconds, try refreshing the page.", _jsx("br", {}), "If the issue persists, please check the browser console for errors."] })] }), children: [tempoRoutes, !tempoRoutes && (_jsxs(Routes, { children: [_jsx(Route, { path: "/", element: _jsx(Dashboard, {}) }), _jsx(Route, { path: "jobs", element: _jsx(MainLayout, { title: "Job Management", children: _jsx(UnifiedJobWorkflow, {}) }) }), _jsx(Route, { path: "jobs/new", element: _jsx(MainLayout, { title: "Create New Job", children: _jsx("div", { className: "p-6", children: _jsx(CreateJobDialog, { open: true, triggerButton: false }) }) }) }), _jsx(Route, { path: "jobs/:id", element: _jsx(MainLayout, { title: "Job Details", children: _jsx(JobDetail, {}) }) }), _jsx(Route, { path: "jobs/:id/edit", element: _jsx(MainLayout, { title: "Edit Job", children: _jsx(JobForm, {}) }) }), _jsx(Route, { path: "schedule", element: _jsx(MainLayout, { title: "Production Schedule", children: _jsx(ScheduleView, {}) }) }), _jsx(Route, { path: "staff", element: _jsx(StaffManagementPage, {}) }), _jsx(Route, { path: "staff/new", element: _jsx(StaffFormPage, {}) }), _jsx(Route, { path: "staff/:id", element: _jsx(StaffDetailPage, {}) }), _jsx(Route, { path: "staff/:id/edit", element: _jsx(StaffFormPage, {}) }), _jsx(Route, { path: "reports", element: _jsx(ReportsPage, {}) }), _jsx(Route, { path: "settings", element: _jsx(SettingsPage, {}) }), _jsx(Route, { path: "notifications", element: _jsx(NotificationsPage, {}) }), _jsx(Route, { path: "help", element: _jsx(HelpPage, {}) }), import.meta.env.VITE_TEMPO === "true" && _jsx(Route, { path: "tempobook/*", element: _jsx("div", {}) }), _jsx(Route, { path: "*", element: _jsx(Dashboard, {}) })] }))] }), _jsx(FeedbackDrawer, {}), _jsx(Toaster, {}), _jsx(DebugPanel, {})] }) }));
 }
 export default App;
