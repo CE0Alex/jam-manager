@@ -35,6 +35,9 @@ export default function ScheduleJobForm() {
   const location = useLocation();
   const { jobs, staff, schedule, settings, addScheduleEvent, getJobById, jobTypes } = useAppContext();
 
+  // Get preselected job ID from location state if available
+  const preselectedJobId = location.state?.preselectedJobId || "";
+
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [formData, setFormData] = useState<{
     jobId: string;
@@ -45,7 +48,7 @@ export default function ScheduleJobForm() {
     endTime: string;
     notes: string;
   }>({
-    jobId: "",
+    jobId: preselectedJobId,
     staffId: "",
     startDate: format(new Date(), "yyyy-MM-dd"),
     startTime: "09:00",
