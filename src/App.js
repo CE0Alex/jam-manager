@@ -38,6 +38,7 @@ const JobDetail = lazyWithRetry(() => import("./components/jobs/JobDetail"));
 const JobForm = lazyWithRetry(() => import("./components/jobs/JobForm"));
 // ScheduleView with retry for better reliability
 const ScheduleView = lazyWithRetry(() => import("./components/schedule/ScheduleView"));
+const ScheduleJobForm = lazyWithRetry(() => import("./components/schedule/ScheduleJobForm"));
 const StaffManagementPage = lazyWithRetry(() => import("./pages/StaffManagementPage"));
 const StaffDetailPage = lazyWithRetry(() => import("./pages/StaffDetailPage"));
 const StaffFormPage = lazyWithRetry(() => import("./pages/StaffFormPage"));
@@ -100,6 +101,6 @@ function App() {
                   fallback: _jsx("div", { className: "p-8 text-center", children: "Loading production schedule..." }),
                   children: _jsx(ScheduleView, {})
                 }) 
-              }) }), _jsx(Route, { path: "staff", element: _jsx(StaffManagementPage, {}) }), _jsx(Route, { path: "staff/new", element: _jsx(StaffFormPage, {}) }), _jsx(Route, { path: "staff/:id", element: _jsx(StaffDetailPage, {}) }), _jsx(Route, { path: "staff/:id/edit", element: _jsx(StaffFormPage, {}) }), _jsx(Route, { path: "reports", element: _jsx(ReportsPage, {}) }), _jsx(Route, { path: "settings", element: _jsx(SettingsPage, {}) }), _jsx(Route, { path: "notifications", element: _jsx(NotificationsPage, {}) }), _jsx(Route, { path: "help", element: _jsx(HelpPage, {}) }), import.meta.env.VITE_TEMPO === "true" && _jsx(Route, { path: "tempobook/*", element: _jsx("div", {}) }), _jsx(Route, { path: "*", element: _jsx(Dashboard, {}) })] }))] }), _jsx(FeedbackDrawer, {}), _jsx(Toaster, {}), _jsx(DebugPanel, {})] }) }));
+              }) }), _jsx(Route, { path: "jobs/schedule", element: _jsx(MainLayout, { title: "Schedule Job", children: _jsx(ScheduleJobForm, {}) }) }), _jsx(Route, { path: "staff", element: _jsx(StaffManagementPage, {}) }), _jsx(Route, { path: "staff/new", element: _jsx(StaffFormPage, {}) }), _jsx(Route, { path: "staff/:id", element: _jsx(StaffDetailPage, {}) }), _jsx(Route, { path: "staff/:id/edit", element: _jsx(StaffFormPage, {}) }), _jsx(Route, { path: "reports", element: _jsx(ReportsPage, {}) }), _jsx(Route, { path: "settings", element: _jsx(SettingsPage, {}) }), _jsx(Route, { path: "notifications", element: _jsx(NotificationsPage, {}) }), _jsx(Route, { path: "help", element: _jsx(HelpPage, {}) }), import.meta.env.VITE_TEMPO === "true" && _jsx(Route, { path: "tempobook/*", element: _jsx("div", {}) }), _jsx(Route, { path: "*", element: _jsx(Dashboard, {}) })] }))] }), _jsx(FeedbackDrawer, {}), _jsx(Toaster, {}), _jsx(DebugPanel, {})] }) }));
 }
 export default App;

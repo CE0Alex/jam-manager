@@ -1,14 +1,17 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { addDays, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { Plus, CalendarPlus } from "lucide-react";
 // Import the ProductionCalendar component from index
 import { ProductionCalendar } from "./index";
 
 const ScheduleView = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const { schedule, jobs, getJobById } = useAppContext();
     
     // State to handle showing the production calendar dialog for a specific job
@@ -54,6 +57,11 @@ const ScheduleView = () => {
         }
     }, [location, getJobById]);
     
+    // Navigate to the job scheduling form
+    const handleScheduleJobClick = () => {
+        navigate('/jobs/schedule');
+    };
+    
     // Render the full-featured ProductionCalendar component
     const renderCalendar = () => {
         return _jsx(ProductionCalendar, {
@@ -65,10 +73,20 @@ const ScheduleView = () => {
     };
 
     return (_jsxs("div", { className: "container mx-auto p-4 space-y-6 bg-background", children: [
-        _jsxs("div", { className: "flex flex-col space-y-2", children: [
-            _jsx("h1", { className: "text-3xl font-bold tracking-tight", children: "Production Schedule" }), 
-            _jsx("p", { className: "text-muted-foreground", children: "Manage your production schedule" })
-        ] }), 
+        _jsxs("div", { className: "flex justify-between items-center", children: [
+            _jsxs("div", { children: [
+                _jsx("h1", { className: "text-3xl font-bold tracking-tight", children: "Production Schedule" }), 
+                _jsx("p", { className: "text-muted-foreground", children: "Manage your production schedule" })
+            ]}),
+            _jsxs(Button, { 
+                onClick: handleScheduleJobClick,
+                className: "flex items-center gap-2",
+                children: [
+                    _jsx(CalendarPlus, { size: 16 }),
+                    "Schedule Job"
+                ]
+            })
+        ]}),
         renderCalendar(),
         _jsxs(Card, { className: "mt-6", children: [
             _jsx(CardHeader, { children: _jsx(CardTitle, { children: "Schedule Overview" }) }), 

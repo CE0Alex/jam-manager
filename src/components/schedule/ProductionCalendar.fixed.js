@@ -23,7 +23,6 @@ import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import * as autoScheduleUtils from "@/lib/scheduling/autoScheduleUtils";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import SimpleProductionCalendar from './SimpleProductionCalendar';
 
 // Create a proper wrapper component that implements the ProductionCalendar functionality
 const ProductionCalendarFixed = (props) => {
@@ -899,14 +898,19 @@ const ProductionCalendarFixed = (props) => {
       ]
     });
   } catch (error) {
-    console.error("Error rendering ProductionCalendar, falling back to SimpleProductionCalendar:", error);
+    console.error("Error rendering ProductionCalendar:", error);
     
-    // Emergency fallback in case the advanced implementation fails
-    return _jsx(SimpleProductionCalendar, {
-      initialDate: initialDate, 
-      initialView: initialView,
-      initialJob: initialJob,
-      onScheduled: onScheduled
+    // Error state instead of fallback
+    return _jsxs("div", {
+      className: "p-8 text-center",
+      children: [
+        _jsx("h2", { className: "text-2xl font-bold text-red-600 mb-4", children: "Calendar Error" }),
+        _jsx("p", { className: "mb-4", children: "There was an error loading the calendar." }),
+        _jsx(Button, {
+          onClick: () => window.location.reload(),
+          children: "Reload Page"
+        })
+      ]
     });
   }
 };
