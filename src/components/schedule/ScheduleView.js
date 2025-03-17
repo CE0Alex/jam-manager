@@ -2,9 +2,17 @@ import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
-// Import with error handling
+// Import SimpleProductionCalendar directly - this is our safe fallback
 import SimpleProductionCalendar from "./SimpleProductionCalendar";
-import ProductionCalendar from "./ProductionCalendar.fixed";
+// Try to import ProductionCalendar but use error handling
+let ProductionCalendar;
+try {
+    // This might fail in production, but we'll handle it gracefully
+    ProductionCalendar = require("./ProductionCalendar").default;
+} catch (e) {
+    console.warn("Using SimpleProductionCalendar as fallback:", e.message);
+    ProductionCalendar = SimpleProductionCalendar;
+}
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addDays, isWithinInterval, parseISO, startOfDay, endOfDay } from "date-fns";
 // Debug statement to confirm file is loaded
@@ -50,8 +58,20 @@ const ScheduleView = ({ initialTab = "calendar", }) => {
             }
         }
     }, [location, getJobById]);
-    // Use SimpleProductionCalendar as fallback if ProductionCalendar isn't available
+    // Always use ProductionCalendar with SimpleProductionCalendar as fallback
     const CalendarComponent = ProductionCalendar || SimpleProductionCalendar;
-    return (_jsxs("div", { className: "container mx-auto p-4 space-y-6 bg-background", children: [_jsxs("div", { className: "flex flex-col space-y-2", children: [_jsx("h1", { className: "text-3xl font-bold tracking-tight", children: "Production Schedule" }), _jsx("p", { className: "text-muted-foreground", children: "Manage your production schedule" })] }), _jsx(CalendarComponent, { initialJob: selectedJobForSchedule, onScheduled: () => setSelectedJobForSchedule(null) }), _jsxs(Card, { className: "mt-6", children: [_jsx(CardHeader, { children: _jsx(CardTitle, { children: "Schedule Overview" }) }), _jsx(CardContent, { children: _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-4", children: [_jsxs("div", { className: "p-4 rounded-lg bg-primary/10 border", children: [_jsx("h3", { className: "font-medium mb-2", children: "Upcoming Jobs" }), _jsx("p", { className: "text-2xl font-bold", children: upcomingJobs }), _jsx("p", { className: "text-sm text-muted-foreground", children: "Next 7 days" })] }), _jsxs("div", { className: "p-4 rounded-lg bg-primary/10 border", children: [_jsx("h3", { className: "font-medium mb-2", children: "Staff Assigned" }), _jsx("p", { className: "text-2xl font-bold", children: staffAssigned }), _jsx("p", { className: "text-sm text-muted-foreground", children: "Across all scheduled jobs" })] }), _jsxs("div", { className: "p-4 rounded-lg bg-primary/10 border", children: [_jsx("h3", { className: "font-medium mb-2", children: "Today's Jobs" }), _jsx("p", { className: "text-2xl font-bold", children: todaysJobs }), _jsx("p", { className: "text-sm text-muted-foreground", children: "Scheduled for today" })] })] }) })] })] }));
+    // Add extra error boundary for safety
+    const renderCalendarSafely = () => {
+        try {
+            return _jsx(CalendarComponent, { 
+                initialJob: selectedJobForSchedule, 
+                onScheduled: () => setSelectedJobForSchedule(null) 
+            });
+        } catch (error) {
+            console.error("Error rendering calendar component:", error);
+            return _jsx(SimpleProductionCalendar, {});
+        }
+    }
+    return (_jsxs("div", { className: "container mx-auto p-4 space-y-6 bg-background", children: [_jsxs("div", { className: "flex flex-col space-y-2", children: [_jsx("h1", { className: "text-3xl font-bold tracking-tight", children: "Production Schedule" }), _jsx("p", { className: "text-muted-foreground", children: "Manage your production schedule" })] }), renderCalendarSafely(), _jsxs(Card, { className: "mt-6", children: [_jsx(CardHeader, { children: _jsx(CardTitle, { children: "Schedule Overview" }) }), _jsx(CardContent, { children: _jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-4", children: [_jsxs("div", { className: "p-4 rounded-lg bg-primary/10 border", children: [_jsx("h3", { className: "font-medium mb-2", children: "Upcoming Jobs" }), _jsx("p", { className: "text-2xl font-bold", children: upcomingJobs }), _jsx("p", { className: "text-sm text-muted-foreground", children: "Next 7 days" })] }), _jsxs("div", { className: "p-4 rounded-lg bg-primary/10 border", children: [_jsx("h3", { className: "font-medium mb-2", children: "Staff Assigned" }), _jsx("p", { className: "text-2xl font-bold", children: staffAssigned }), _jsx("p", { className: "text-sm text-muted-foreground", children: "Across all scheduled jobs" })] }), _jsxs("div", { className: "p-4 rounded-lg bg-primary/10 border", children: [_jsx("h3", { className: "font-medium mb-2", children: "Today's Jobs" }), _jsx("p", { className: "text-2xl font-bold", children: todaysJobs }), _jsx("p", { className: "text-sm text-muted-foreground", children: "Scheduled for today" })] })] }) })] })] }));
 };
 export default ScheduleView;
