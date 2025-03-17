@@ -207,6 +207,15 @@ function App() {
                 } 
               />
               
+              <Route 
+                path="schedule/creation" 
+                element={
+                  <MainLayout title="Schedule Creation">
+                    <ScheduleJobForm />
+                  </MainLayout>
+                } 
+              />
+              
               {/* Staff Routes */}
               <Route path="staff" element={<StaffManagementPage />} />
               <Route path="staff/new" element={<StaffFormPage />} />

@@ -6,3 +6,7 @@ export { default as ScheduleConflictAlert } from './ScheduleConflictAlert';
 export { default as ScheduleSuggestions } from './ScheduleSuggestions';
 export { default as ScheduleView } from './ScheduleView';
 export { default as CapacityManager } from './CapacityManager';
+export { default as EnhancedCalendar } from './EnhancedCalendar';
+
+// Set default export to EnhancedCalendar
+export { default } from './EnhancedCalendar';

@@ -79,8 +79,8 @@ export default function JobDetail() {
         <div className="flex space-x-2">
           <Button
             variant="outline"
-            onClick={() => navigate(`/schedule`, {
-              state: { activeJob: job.id, openScheduler: true }
+            onClick={() => navigate(`/schedule/job`, {
+              state: { preselectedJobId: job.id }
             })}
           >
             <Calendar className="h-4 w-4 mr-2" />
