@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
-import ProductionCalendar from "./ProductionCalendar.fixed.js";
+import EnhancedCalendar from "./EnhancedCalendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "lucide-react";
 import { addDays, format, isWithinInterval, parseISO, startOfDay, endOfDay } from "date-fns";
@@ -85,7 +85,7 @@ const ScheduleView = ({
         </Button>
       </div>
 
-      <ProductionCalendar initialJob={selectedJobForSchedule} onScheduled={() => setSelectedJobForSchedule(null)} />
+      <EnhancedCalendar />
 
       <Card className="mt-6">
         <CardHeader>

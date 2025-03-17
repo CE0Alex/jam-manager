@@ -1,10 +1,12 @@
-// Import SimpleProductionCalendar and ProductionCalendar.fixed
+// Import required components
 import SimpleProductionCalendar from './SimpleProductionCalendar';
 import ProductionCalendarFixed from './ProductionCalendar.fixed.js';
+import EnhancedCalendar from './EnhancedCalendar';
 
-// Export both components
+// Export individual components
 export { SimpleProductionCalendar };
 export { ProductionCalendarFixed as ProductionCalendar };
+export { EnhancedCalendar };
 
-// Export the fixed version as default
-export default ProductionCalendarFixed; 
+// Export the enhanced calendar as default
+export default EnhancedCalendar; 
