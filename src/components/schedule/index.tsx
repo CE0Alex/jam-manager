@@ -1,8 +1,10 @@
-// Import SimpleProductionCalendar as our main calendar component
+// Import SimpleProductionCalendar and ProductionCalendar.fixed
 import SimpleProductionCalendar from './SimpleProductionCalendar';
+import ProductionCalendarFixed from './ProductionCalendar.fixed';
 
-// Export the simple calendar directly
+// Export both components
 export { SimpleProductionCalendar };
+export { ProductionCalendarFixed as ProductionCalendar };
 
-// Export SimpleProductionCalendar as default for simplicity
-export default SimpleProductionCalendar; 
+// Export the fixed version as default
+export default ProductionCalendarFixed; 

@@ -4,11 +4,8 @@ import { useLocation } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addDays, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
-// Import SimpleProductionCalendar directly - this is our safe fallback
-import SimpleProductionCalendar from "./SimpleProductionCalendar";
-
-// No dynamic imports - we'll use SimpleProductionCalendar directly
-const ProductionCalendarComponent = SimpleProductionCalendar;
+// Import the ProductionCalendar component from index
+import { ProductionCalendar } from "./index";
 
 const ScheduleView = () => {
     const location = useLocation();
@@ -57,9 +54,9 @@ const ScheduleView = () => {
         }
     }, [location, getJobById]);
     
-    // Simple render function - no dynamic components or complexity
+    // Render the full-featured ProductionCalendar component
     const renderCalendar = () => {
-        return _jsx(SimpleProductionCalendar, {
+        return _jsx(ProductionCalendar, {
             initialJob: selectedJobForSchedule,
             initialDate: new Date(),
             initialView: "week",
