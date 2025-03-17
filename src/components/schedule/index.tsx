@@ -2,10 +2,21 @@
 import SimpleProductionCalendar from './SimpleProductionCalendar';
 // Try to import the main ProductionCalendar component with error handling
 let ProductionCalendar;
+
+// Use dynamic import with ES modules instead of require
 try {
-  ProductionCalendar = require('./ProductionCalendar').default;
+  // Import directly instead of using require
+  ProductionCalendar = SimpleProductionCalendar; // Default to fallback
+  
+  // We'll try to import the real component in a separate import
+  import('./ProductionCalendar').then(module => {
+    ProductionCalendar = module.default;
+    console.log('Successfully loaded ProductionCalendar component');
+  }).catch(error => {
+    console.warn('Failed to import ProductionCalendar, using SimpleProductionCalendar as fallback:', error.message);
+  });
 } catch (error) {
-  console.warn('Failed to import ProductionCalendar, using SimpleProductionCalendar as fallback:', error.message);
+  console.warn('Failed to setup ProductionCalendar import, using SimpleProductionCalendar as fallback:', error.message);
   ProductionCalendar = SimpleProductionCalendar;
 }
 
