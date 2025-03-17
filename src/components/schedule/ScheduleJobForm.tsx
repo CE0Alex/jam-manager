@@ -86,6 +86,17 @@ export default function ScheduleJobForm() {
   };
 
   const handleSelectChange = (name: string, value: string) => {
+    // Validate staff ID is not empty when it's supposed to be a staff member
+    if (name === "staffId" && value !== "unassigned" && (!value || value.trim() === "")) {
+      // Don't update with invalid staff ID
+      toast({
+        title: "Invalid Selection",
+        description: "Please select a valid staff member",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setFormData((prev) => ({ ...prev, [name]: value }));
 
     // Clear validation error when field is edited
@@ -552,6 +563,15 @@ export default function ScheduleJobForm() {
     }
   }, [location, getJobById]);
 
+  // Validate staff data on component mount
+  useEffect(() => {
+    // Check if there are any staff members with empty IDs
+    const invalidStaff = staff.filter(member => !member.id || member.id.trim() === "");
+    if (invalidStaff.length > 0) {
+      console.warn(`Found ${invalidStaff.length} staff members with invalid IDs. These will be filtered out.`);
+    }
+  }, [staff]);
+
   return (
     <div className="w-full h-full bg-gray-50">
       <div className="mb-6">
@@ -661,25 +681,31 @@ export default function ScheduleJobForm() {
                             return jobType ? member.jobTypeCapabilities.includes(jobType) : true;
                           });
                           
-                          return filteredStaff.map((member) => (
-                            // Only render SelectItem if member.id exists and is not an empty string
-                            member.id ? (
-                              <SelectItem key={member.id} value={member.id}>
-                                {member.name}
-                              </SelectItem>
-                            ) : null
-                          ));
+                          return filteredStaff.map((member) => {
+                            // Strict check: only render if member.id exists, is not null, and is not an empty string
+                            if (member.id && member.id.trim() !== "") {
+                              return (
+                                <SelectItem key={member.id} value={member.id}>
+                                  {member.name}
+                                </SelectItem>
+                              );
+                            }
+                            return null;
+                          });
                         })()
                       ) : (
                         // If no job is selected, show all staff
-                        staff.map((member) => (
-                          // Only render SelectItem if member.id exists and is not an empty string
-                          member.id ? (
-                            <SelectItem key={member.id} value={member.id}>
-                              {member.name}
-                            </SelectItem>
-                          ) : null
-                        ))
+                        staff.map((member) => {
+                          // Strict check: only render if member.id exists, is not null, and is not an empty string
+                          if (member.id && member.id.trim() !== "") {
+                            return (
+                              <SelectItem key={member.id} value={member.id}>
+                                {member.name}
+                              </SelectItem>
+                            );
+                          }
+                          return null;
+                        })
                       )}
                     </SelectContent>
                   </Select>
@@ -732,13 +758,13 @@ export default function ScheduleJobForm() {
                       </SelectTrigger>
                       <SelectContent>
                         {getAvailableTimeSlots.length === 0 ? (
-                          <SelectItem value="" disabled>
+                          <SelectItem value="09:00" disabled>
                             No available times
                           </SelectItem>
                         ) : (
                           getAvailableTimeSlots.map((time) => {
-                            // Skip empty time values
-                            if (!time) return null;
+                            // Skip empty or invalid time values
+                            if (!time || time.trim() === "") return null;
                             return (
                               <SelectItem key={time} value={time}>
                                 {formatTime12Hour(time)}
@@ -799,14 +825,14 @@ export default function ScheduleJobForm() {
                       </SelectTrigger>
                       <SelectContent>
                         {generateTimeOptions(8, 23, false).map((time) => {
-                            // Skip empty time values
-                            if (!time) return null;
-                            return (
-                              <SelectItem key={time} value={time}>
-                                {formatTime12Hour(time)}
-                              </SelectItem>
-                            );
-                          })}
+                          // Skip empty or invalid time values
+                          if (!time || time.trim() === "") return null;
+                          return (
+                            <SelectItem key={time} value={time}>
+                              {formatTime12Hour(time)}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                     {validationErrors.endTime && (
