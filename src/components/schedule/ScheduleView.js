@@ -5,7 +5,7 @@ import { useAppContext } from "@/context/AppContext";
 // Import SimpleProductionCalendar directly - this is our safe fallback
 import SimpleProductionCalendar from "./SimpleProductionCalendar";
 // Import our fixed component
-import ProductionCalendarFixed from "./ProductionCalendar.fixed";
+import ProductionCalendarFixed from "./ProductionCalendar.fixed.js";
 
 // Initialize with fixed component which itself uses the fallback internally
 let ProductionCalendarComponent = ProductionCalendarFixed;
