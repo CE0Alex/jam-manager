@@ -1,5 +1,9 @@
 src/components/schedule/ProductionCalendar.fixed.tsx
-src/components/schedule/ProductionCalendar.fixed.js 
+src/components/schedule/ProductionCalendar.fixed.js
 tempo-routes
 **/node_modules/tempo-routes/
-**/node_modules/tempo-devtools/ 
+**/node_modules/tempo-devtools/
+src/components/schedule/ScheduleJobForm.js
+src/components/schedule/ScheduleView.js
+src/components/schedule/index.js
+src/components/schedule/SimpleProductionCalendar.js 
