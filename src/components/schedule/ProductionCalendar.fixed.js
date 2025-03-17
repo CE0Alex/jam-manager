@@ -10,14 +10,14 @@ const ProductionCalendarFixed = (props) => {
   // Initialize props for SimpleProductionCalendar
   const enhancedProps = {
     ...props,
-    // Add any additional props needed by SimpleProductionCalendar
-    initialView: props.initialView || "week",
-    initialDate: props.initialDate || new Date()
+    // Always provide default values for required props
+    initialView: props?.initialView || "week",
+    initialDate: props?.initialDate || new Date()
   };
   
   useEffect(() => {
     // Handle the initialJob prop specifically if present
-    if (props.initialJob && props.onScheduled && !isInitialized) {
+    if (props?.initialJob && props?.onScheduled && !isInitialized) {
       console.log('Found initialJob in props, handling specially');
       
       // We could process the job here if needed
@@ -25,13 +25,13 @@ const ProductionCalendarFixed = (props) => {
       // Call onScheduled callback to signal we've "processed" the job
       // Using setTimeout to make it asynchronous
       setTimeout(() => {
-        if (props.onScheduled && typeof props.onScheduled === 'function') {
+        if (props?.onScheduled && typeof props?.onScheduled === 'function') {
           props.onScheduled();
         }
         setIsInitialized(true);
       }, 500);
     }
-  }, [props.initialJob, props.onScheduled, isInitialized]);
+  }, [props?.initialJob, props?.onScheduled, isInitialized]);
 
   return <SimpleProductionCalendar {...enhancedProps} />;
 };

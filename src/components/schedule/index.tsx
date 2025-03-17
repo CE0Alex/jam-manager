@@ -13,8 +13,11 @@ try {
       // Try to import the full component
       const module = await import('./ProductionCalendar');
       if (module && module.default) {
-        ProductionCalendar = module.default;
-        console.log('Successfully loaded full ProductionCalendar component');
+        // Make sure we have a valid component before reassigning
+        if (typeof module.default === 'function') {
+          ProductionCalendar = module.default;
+          console.log('Successfully loaded full ProductionCalendar component');
+        }
       }
     } catch (error) {
       console.warn('Error loading ProductionCalendar, using fixed fallback:', error.message);

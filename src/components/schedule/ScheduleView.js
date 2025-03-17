@@ -13,15 +13,33 @@ try {
   // Use dynamic import with a proper error boundary
   const loadProductionCalendar = async () => {
     try {
-      // First try to load the full version
+      // First try to import from index which has the fixed version as fallback
+      const indexModule = await import("./index");
+      if (indexModule && indexModule.default && typeof indexModule.default === 'function') {
+        ProductionCalendarComponent = indexModule.default;
+        console.log("Successfully loaded ProductionCalendar from index");
+        return;
+      }
+      
+      // If that fails, try direct import
       const module = await import("./ProductionCalendar");
-      if (module && module.default) {
+      if (module && module.default && typeof module.default === 'function') {
         ProductionCalendarComponent = module.default;
         console.log("Successfully loaded ProductionCalendar dynamically");
       }
     } catch (e) {
       console.warn("Failed to load ProductionCalendar, using fallback:", e.message);
-      // Keep using SimpleProductionCalendar
+      // Attempt to import the fixed version as backup plan
+      try {
+        const fixedModule = await import("./ProductionCalendar.fixed");
+        if (fixedModule && fixedModule.default && typeof fixedModule.default === 'function') {
+          ProductionCalendarComponent = fixedModule.default;
+          console.log("Using ProductionCalendar.fixed as fallback");
+        }
+      } catch (fixedError) {
+        console.warn("Failed to load fixed version, using SimpleProductionCalendar:", fixedError.message);
+        // Keep using SimpleProductionCalendar
+      }
     }
   };
   
@@ -47,19 +65,22 @@ const ScheduleView = ({ initialTab = "calendar", }) => {
     
     // Effect to initialize the calendar component
     useEffect(() => {
-        // Set initial component
-        if (ProductionCalendarComponent !== SimpleProductionCalendar) {
+        // Set initial component and ensure it's a function
+        if (ProductionCalendarComponent !== SimpleProductionCalendar && 
+            typeof ProductionCalendarComponent === 'function') {
             setCalendarComponent(ProductionCalendarComponent);
             setCalendarLoaded(true);
         }
         
         // Try again after a short delay to see if dynamic imports completed
         const timer = setTimeout(() => {
-            if (ProductionCalendarComponent !== SimpleProductionCalendar) {
+            if (ProductionCalendarComponent !== SimpleProductionCalendar && 
+                typeof ProductionCalendarComponent === 'function') {
                 setCalendarComponent(ProductionCalendarComponent);
                 setCalendarLoaded(true);
                 console.log("ProductionCalendar loaded on retry");
             } else {
+                setCalendarComponent(SimpleProductionCalendar); // Ensure we have a valid component
                 console.log("Using SimpleProductionCalendar as ultimate fallback");
             }
         }, 1000);
@@ -122,7 +143,9 @@ const ScheduleView = ({ initialTab = "calendar", }) => {
                         
             const CalendarToRender = calendarComponent;
             return _jsx(CalendarToRender, { 
-                initialJob: selectedJobForSchedule, 
+                initialJob: selectedJobForSchedule,
+                initialDate: new Date(),
+                initialView: "week",
                 onScheduled: () => setSelectedJobForSchedule(null) 
             });
         } catch (error) {
@@ -130,6 +153,8 @@ const ScheduleView = ({ initialTab = "calendar", }) => {
             // Ultimate fallback is SimpleProductionCalendar
             return _jsx(SimpleProductionCalendar, {
                 initialJob: selectedJobForSchedule,
+                initialDate: new Date(),
+                initialView: "week",
                 onScheduled: () => setSelectedJobForSchedule(null)
             });
         }
