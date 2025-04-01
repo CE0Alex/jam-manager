@@ -122,3 +122,4 @@ If you encounter TypeScript errors during build:
    ```bash
    npm run type-check
    ```
+# Deployed version with Supabase integration
