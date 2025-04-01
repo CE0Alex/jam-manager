@@ -1,3 +1,24 @@
+# Jam Manager (Supabase Version)
+
+This is the Supabase-integrated version of Jam Manager, migrated from localStorage to Supabase for data persistence. The application now supports:
+
+- Cloud-based data storage with Supabase PostgreSQL
+- Local data fallback if connection fails
+- Fixed scheduling bugs for better reliability
+- Improved timezone handling
+- Standardized conflict detection
+
+## Migration Details
+
+The original localStorage-based app has been migrated to use Supabase as the backend. Key changes:
+
+- Added Supabase client and utilities in `src/lib/supabase/`
+- Updated AppContext.tsx to use Supabase for CRUD operations
+- Fixed scheduling functionality bugs
+- Added data conversion utilities between frontend and Supabase models
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
