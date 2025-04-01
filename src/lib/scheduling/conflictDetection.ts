@@ -11,6 +11,24 @@ export interface ScheduleConflict {
 }
 
 /**
+ * Normalizes a date string to ensure consistent timezone handling
+ * @param dateTimeString ISO date string
+ * @returns Date object normalized to user's local timezone
+ */
+export function normalizeDate(dateTimeString: string): Date {
+  const date = new Date(dateTimeString);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes(),
+    0,
+    0
+  );
+}
+
+/**
  * Detect conflicts for a new or updated schedule event
  * @param newEvent The event being scheduled or updated
  * @param existingEvents All existing schedule events
@@ -31,8 +49,9 @@ export function detectScheduleConflicts(
     ? existingEvents.filter(event => event.id !== newEvent.id) 
     : existingEvents;
   
-  const newStart = new Date(newEvent.startTime);
-  const newEnd = new Date(newEvent.endTime);
+  // Use normalized dates for consistent comparison
+  const newStart = normalizeDate(newEvent.startTime);
+  const newEnd = normalizeDate(newEvent.endTime);
   
   // Check for invalid time range
   if (newEnd <= newStart) {
@@ -50,7 +69,8 @@ export function detectScheduleConflicts(
   
   // Check staff availability
   if (staffMember) {
-  const dayOfWeek = new Date(newStart).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+  const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const dayOfWeek = dayNames[new Date(newStart).getDay()];
   
     // Check if staff is available on this day
     if (!staffMember.availability[dayOfWeek as keyof typeof staffMember.availability]) {
@@ -69,6 +89,7 @@ export function detectScheduleConflicts(
         const [startHour, startMinute] = start.split(":").map(Number);
         const [endHour, endMinute] = end.split(":").map(Number);
         
+        // Create date objects in the same day as the event for proper comparison
         const availStart = new Date(newStart);
         availStart.setHours(startHour, startMinute, 0, 0);
         
@@ -88,6 +109,7 @@ export function detectScheduleConflicts(
       
       // Check for blocked times
       if (staffMember.blockedTimes) {
+        // Get just the date part (YYYY-MM-DD) for consistent comparison
         const newEventDate = newStart.toISOString().split('T')[0];
         const blockedTimesForDate = staffMember.blockedTimes.filter(
           bt => bt.date === newEventDate
@@ -97,6 +119,7 @@ export function detectScheduleConflicts(
           const [blockStartHour, blockStartMinute] = blockedTime.start.split(":").map(Number);
           const [blockEndHour, blockEndMinute] = blockedTime.end.split(":").map(Number);
           
+          // Create date objects in the same day as the event for proper comparison
           const blockStart = new Date(newStart);
           blockStart.setHours(blockStartHour, blockStartMinute, 0, 0);
           
@@ -122,8 +145,9 @@ export function detectScheduleConflicts(
     const staffEvents = events.filter(event => event.staffId === newEvent.staffId);
     
     for (const existingEvent of staffEvents) {
-      const existingStart = new Date(existingEvent.startTime);
-      const existingEnd = new Date(existingEvent.endTime);
+      // Use normalized dates for consistent comparison
+      const existingStart = normalizeDate(existingEvent.startTime);
+      const existingEnd = normalizeDate(existingEvent.endTime);
       
       // Check for overlap
       if (!(newEnd <= existingStart || newStart >= existingEnd)) {
@@ -146,8 +170,9 @@ export function detectScheduleConflicts(
     );
     
     for (const existingEvent of machineEvents) {
-      const existingStart = new Date(existingEvent.startTime);
-      const existingEnd = new Date(existingEvent.endTime);
+      // Use normalized dates for consistent comparison
+      const existingStart = normalizeDate(existingEvent.startTime);
+      const existingEnd = normalizeDate(existingEvent.endTime);
       
       // Check for overlap
       if (!(newEnd <= existingStart || newStart >= existingEnd)) {
@@ -205,7 +230,8 @@ export function getAvailableTimeSlots(
   if (!staffMember) return [];
   
   // Get day of week for availability check
-  const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+  const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const dayOfWeek = dayNames[new Date(date).getDay()];
   
   // Check if staff is available on this day
   if (!staffMember.availability[dayOfWeek as keyof typeof staffMember.availability]) {
@@ -227,7 +253,7 @@ export function getAvailableTimeSlots(
   const [startHour, startMinute] = start.split(":").map(Number);
   const [endHour, endMinute] = end.split(":").map(Number);
   
-  // Create date objects for start and end of availability
+  // Create normalized date objects for start and end of availability
   const availStart = new Date(date);
   availStart.setHours(startHour, startMinute, 0, 0);
   
@@ -250,19 +276,23 @@ export function getAvailableTimeSlots(
     currentSlot.setMinutes(currentSlot.getMinutes() + 30);
   }
   
-  // Filter out slots that have existing events
+  // Get the date string in YYYY-MM-DD format for comparison
   const dateString = date.toISOString().split('T')[0];
-  const staffEvents = existingEvents.filter(event => 
-    event.staffId === staffId && 
-    new Date(event.startTime).toISOString().split('T')[0] === dateString
-  );
+  
+  // Filter out slots that have existing events
+  const staffEvents = existingEvents.filter(event => {
+    // Normalize the event date for comparison
+    const eventDate = normalizeDate(event.startTime);
+    return event.staffId === staffId && 
+      eventDate.toISOString().split('T')[0] === dateString;
+  });
   
   // Apply blocked times filter
   const blockedTimesForDate = staffMember.blockedTimes?.filter(
     bt => bt.date === dateString
   ) || [];
   
-  // Convert blocked times to Date objects
+  // Convert blocked times to Date objects on the same day
   const blockedTimes = blockedTimesForDate.map(bt => {
     const [blockStartHour, blockStartMinute] = bt.start.split(":").map(Number);
     const [blockEndHour, blockEndMinute] = bt.end.split(":").map(Number);
@@ -280,8 +310,8 @@ export function getAvailableTimeSlots(
   const availableSlots = timeSlots.filter(slot => {
     // Check against existing events
     const hasEventConflict = staffEvents.some(event => {
-      const eventStart = new Date(event.startTime);
-      const eventEnd = new Date(event.endTime);
+      const eventStart = normalizeDate(event.startTime);
+      const eventEnd = normalizeDate(event.endTime);
       return !(slot.end <= eventStart || slot.start >= eventEnd);
     });
     
@@ -295,95 +325,43 @@ export function getAvailableTimeSlots(
     return !hasBlockedConflict;
   });
   
-  // If minimum duration is longer than 30 minutes, find consecutive available slots
+  // If we need slots for a longer duration than 30 minutes
   if (minimumDuration > 30) {
-  const requiredSlots = Math.ceil(minimumDuration / 30);
-  const consecutiveSlots: Array<{ start: string, end: string }> = [];
-  
-  // Check if we have enough slots at all
-  if (availableSlots.length < requiredSlots) {
-  console.log("Not enough available slots to satisfy duration");
-    return [];
-  }
-  
-  // Simple case: if the duration fits in the full workday and there are no conflicts
-  if (availableSlots.length === timeSlots.length) {
-  const startTime = availableSlots[0].start;
-  const endTimeDate = new Date(availableSlots[0].start);
-  endTimeDate.setMinutes(endTimeDate.getMinutes() + minimumDuration);
-  
-  // Make sure the end time doesn't exceed availability
-  if (endTimeDate <= availEnd) {
-    const endTime = endTimeDate;
+    const requiredConsecutiveSlots = Math.ceil(minimumDuration / 30);
+    const result: Array<{ start: string, end: string }> = [];
     
-  // Format to time strings without seconds
-  return [{
-    start: startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-      end: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-      }];
-      }
-    }
-    
-    for (let i = 0; i <= availableSlots.length - requiredSlots; i++) {
-      let isConsecutive = true;
+    // Find consecutive available slots that satisfy the minimum duration
+    for (let i = 0; i <= availableSlots.length - requiredConsecutiveSlots; i++) {
+      let consecutiveCount = 1;
+      let startSlot = availableSlots[i];
+      let endSlot = availableSlots[i];
       
-      // Check if slots are consecutive
-      for (let j = 0; j < requiredSlots - 1; j++) {
-        if (availableSlots[i + j].end.getTime() !== availableSlots[i + j + 1].start.getTime()) {
-          isConsecutive = false;
+      // Check how many consecutive slots we have starting at this position
+      for (let j = i + 1; j < availableSlots.length && consecutiveCount < requiredConsecutiveSlots; j++) {
+        if (availableSlots[j-1].end.getTime() === availableSlots[j].start.getTime()) {
+          consecutiveCount++;
+          endSlot = availableSlots[j];
+        } else {
           break;
         }
       }
       
-      if (isConsecutive) {
-        consecutiveSlots.push({
-          start: availableSlots[i].start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-          end: availableSlots[i + requiredSlots - 1].end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      // If we found enough consecutive slots, add this time range
+      if (consecutiveCount >= requiredConsecutiveSlots) {
+        result.push({
+          start: startSlot.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          end: endSlot.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
         });
-      }
-    }
-    
-    // If we didn't find consecutive slots, try to find a single block with the required duration
-    if (consecutiveSlots.length === 0 && availableSlots.length > 0) {
-      console.log("No consecutive slots found, trying to find a single block");
-      
-      // Try each available slot as a starting point
-      for (let i = 0; i < availableSlots.length; i++) {
-        const startTime = availableSlots[i].start;
-        const endTime = new Date(startTime.getTime() + (minimumDuration * 60 * 1000));
         
-        // Check if end time is within availability 
-        if (endTime <= availEnd) {
-          // Check if this block overlaps with any existing events
-          let hasConflict = false;
-          
-          for (const event of staffEvents) {
-            const eventStart = new Date(event.startTime);
-            const eventEnd = new Date(event.endTime);
-            
-            if (!(endTime <= eventStart || startTime >= eventEnd)) {
-              hasConflict = true;
-              break;
-            }
-          }
-          
-          if (!hasConflict) {
-            console.log("Found a valid time block!");
-            consecutiveSlots.push({
-              start: startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-              end: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-            });
-            break;
-          }
-        }
+        // Skip to the next non-included slot to avoid duplicate ranges
+        i += (consecutiveCount - 1);
       }
     }
     
-    console.log(`Found ${consecutiveSlots.length} consecutive slots`);
-    return consecutiveSlots;
+    return result;
   }
   
-  // Otherwise, return all available 30-minute slots
+  // For 30-minute slots, just return all available slots
   return availableSlots.map(slot => ({
     start: slot.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
     end: slot.end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })

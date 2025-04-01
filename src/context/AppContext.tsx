@@ -29,6 +29,23 @@ import {
 } from "@/lib/mockData";
 import { addDays, format } from "date-fns";
 import { detectScheduleConflicts, hasScheduleConflicts } from "@/lib/scheduling";
+import { supabase } from "@/lib/supabase/client";
+import {
+  staffToSupabase,
+  staffFromSupabase,
+  jobToSupabase,
+  jobFromSupabase,
+  machineToSupabase,
+  machineFromSupabase,
+  scheduleEventToSupabase,
+  scheduleEventFromSupabase,
+  feedbackToSupabase,
+  feedbackFromSupabase,
+  jobTypeToSupabase,
+  jobTypeFromSupabase,
+  appSettingsToSupabase,
+  appSettingsFromSupabase
+} from "@/lib/supabase/utils";
 
 interface AppContextType {
   // Jobs
@@ -105,59 +122,55 @@ export interface UpdateScheduleEventResult {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  // Load data from localStorage or use mock data as defaults
-  const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  // Load data from Supabase or use mock data as defaults
+  const loadFromSupabase = async <T,>(
+    table: string,
+    defaultValue: T,
+    converter: (item: any) => any
+  ): Promise<T> => {
     try {
-      const storedData = localStorage.getItem(key);
-      if (!storedData) {
-        console.warn(`No data found for ${key} in localStorage, using default value:`, defaultValue);
+      const { data, error } = await supabase.from(table).select('*');
+      
+      if (error) {
+        console.error(`Error loading data from ${table}:`, error);
+        // Load from localStorage as fallback
+        const storedData = localStorage.getItem(table);
+        if (storedData) {
+          try {
+            const parsedData = JSON.parse(storedData);
+            console.log(`Loaded ${table} from localStorage fallback:`, 
+              table === 'job_types' ? parsedData : `[${typeof parsedData}]`);
+            return parsedData;
+          } catch (parseError) {
+            console.error(`Error parsing ${table} from localStorage:`, parseError);
+          }
+        }
         return defaultValue;
       }
-
-      try {
-        const parsedData = JSON.parse(storedData);
-        console.log(`Successfully loaded ${key} from localStorage:`, 
-          key === 'jobTypes' ? parsedData : `[${typeof parsedData}]`);
-        return parsedData;
-      } catch (parseError) {
-        console.error(`Error parsing ${key} from localStorage:`, parseError);
-        console.warn(`Resetting corrupted ${key} data to default value`);
-        localStorage.setItem(key, JSON.stringify(defaultValue));
+      
+      if (!data || data.length === 0) {
+        console.warn(`No data found in ${table}, using default value:`, defaultValue);
         return defaultValue;
       }
+      
+      console.log(`Successfully loaded ${table} from Supabase:`, data);
+      
+      // Convert from Supabase format to application format
+      if (Array.isArray(data)) {
+        return data.map(converter) as unknown as T;
+      } else if (table === 'app_data') {
+        // Special case for settings which is a single record
+        const settingsRecord = data.find(item => item.id === 'settings');
+        return settingsRecord ? converter(settingsRecord) : defaultValue;
+      }
+      
+      return defaultValue;
     } catch (error) {
-      console.error(`Error accessing ${key} from localStorage:`, error);
+      console.error(`Error accessing ${table} from Supabase:`, error);
       return defaultValue;
     }
   };
 
-  // Clear localStorage to ensure fresh data
-  useEffect(() => {
-    try {
-      const hasInitialized = localStorage.getItem("hasInitialized");
-      if (!hasInitialized) {
-        localStorage.clear();
-        localStorage.setItem("hasInitialized", "true");
-
-        // Force set default job types directly to localStorage to ensure they exist
-        localStorage.setItem("jobTypes", JSON.stringify(defaultJobTypes));
-        console.log("Initialized localStorage with default job types:", defaultJobTypes);
-      } else {
-        // Check if jobTypes exist in localStorage and recreate if missing
-        const storedJobTypes = localStorage.getItem("jobTypes");
-        if (!storedJobTypes) {
-          console.warn("Job types missing in localStorage, re-initializing...");
-          localStorage.setItem("jobTypes", JSON.stringify(defaultJobTypes));
-          // Force re-initialization of state
-          setJobTypes([...defaultJobTypes]);
-        }
-      }
-    } catch (error) {
-      console.error("Error initializing localStorage:", error);
-    }
-  }, []);
-
-  // Default business hours: 8am to 5pm
   // Default job types
   const defaultJobTypes: JobTypeDefinition[] = [
     { id: "embroidery", name: "Embroidery", description: "Machine embroidery services" },
@@ -175,31 +188,150 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   // State for jobs, staff, schedule, settings
-  const [settings, setSettings] = useState<AppSettings>(
-    loadFromStorage("settings", defaultSettings),
-  );
-  const [jobTypes, setJobTypes] = useState<JobTypeDefinition[]>(
-    loadFromStorage("jobTypes", defaultJobTypes),
-  );
-  const [jobs, setJobs] = useState<Job[]>(loadFromStorage("jobs", mockJobs));
-  const [staff, setStaff] = useState<StaffMember[]>(
-    loadFromStorage("staff", mockStaff),
-  );
-  const [machines, setMachines] = useState<Machine[]>(
-    loadFromStorage("machines", mockMachines),
-  );
-  const [schedule, setSchedule] = useState<ScheduleEvent[]>(
-    loadFromStorage("schedule", mockSchedule),
-  );
-  const [feedback, setFeedback] = useState<FeedbackItem[]>(
-    loadFromStorage("feedback", []),
-  );
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [jobTypes, setJobTypes] = useState<JobTypeDefinition[]>(defaultJobTypes);
+  const [jobs, setJobs] = useState<Job[]>(mockJobs);
+  const [staff, setStaff] = useState<StaffMember[]>(mockStaff);
+  const [machines, setMachines] = useState<Machine[]>(mockMachines);
+  const [schedule, setSchedule] = useState<ScheduleEvent[]>(mockSchedule);
+  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetrics>(
     generateDashboardMetrics(),
   );
   const [jobFilters, setJobFilters] = useState<JobFilters>({});
   const [filteredJobs, setFilteredJobs] = useState<Job[]>(jobs);
+  const [loading, setLoading] = useState<boolean>(true);
 
+  // Load data from Supabase on component mount
+  useEffect(() => {
+    const loadAllData = async () => {
+      setLoading(true);
+      
+      try {
+        // Load settings
+        const { data: appDataResult } = await supabase
+          .from('app_data')
+          .select('*')
+          .eq('id', 'settings')
+          .single();
+          
+        if (appDataResult) {
+          setSettings(appSettingsFromSupabase(appDataResult));
+        }
+        
+        // Load job types
+        const { data: jobTypesResult } = await supabase
+          .from('job_types')
+          .select('*');
+          
+        if (jobTypesResult && jobTypesResult.length > 0) {
+          setJobTypes(jobTypesResult.map(jobTypeFromSupabase));
+        }
+        
+        // Load staff
+        const { data: staffResult } = await supabase
+          .from('staff')
+          .select('*');
+          
+        if (staffResult && staffResult.length > 0) {
+          setStaff(staffResult.map(staffFromSupabase));
+        } else {
+          // Initialize staff in Supabase if none exists
+          await Promise.all(mockStaff.map(async (member) => {
+            await supabase.from('staff').insert(staffToSupabase(member));
+          }));
+        }
+        
+        // Load machines
+        const { data: machinesResult } = await supabase
+          .from('machines')
+          .select('*');
+          
+        if (machinesResult && machinesResult.length > 0) {
+          setMachines(machinesResult.map(machineFromSupabase));
+        } else {
+          // Initialize machines in Supabase if none exists
+          await Promise.all(mockMachines.map(async (machine) => {
+            await supabase.from('machines').insert(machineToSupabase(machine));
+          }));
+        }
+        
+        // Load jobs
+        const { data: jobsResult } = await supabase
+          .from('jobs')
+          .select('*');
+          
+        if (jobsResult && jobsResult.length > 0) {
+          setJobs(jobsResult.map(jobFromSupabase));
+        } else {
+          // Initialize jobs in Supabase if none exists
+          await Promise.all(mockJobs.map(async (job) => {
+            await supabase.from('jobs').insert(jobToSupabase(job));
+          }));
+        }
+        
+        // Load schedule events
+        const { data: scheduleResult } = await supabase
+          .from('schedule_events')
+          .select('*');
+          
+        if (scheduleResult && scheduleResult.length > 0) {
+          setSchedule(scheduleResult.map(scheduleEventFromSupabase));
+        } else {
+          // Initialize schedule in Supabase if none exists
+          await Promise.all(mockSchedule.map(async (event) => {
+            await supabase.from('schedule_events').insert(scheduleEventToSupabase(event));
+          }));
+        }
+        
+        // Load feedback
+        const { data: feedbackResult } = await supabase
+          .from('feedback')
+          .select('*');
+          
+        if (feedbackResult && feedbackResult.length > 0) {
+          setFeedback(feedbackResult.map(feedbackFromSupabase));
+        }
+      } catch (error) {
+        console.error("Error loading data from Supabase:", error);
+        // Fall back to localStorage if Supabase fails
+        const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+          try {
+            const storedData = localStorage.getItem(key);
+            if (!storedData) {
+              console.warn(`No data found for ${key} in localStorage, using default value:`, defaultValue);
+              return defaultValue;
+            }
+      
+            try {
+              const parsedData = JSON.parse(storedData);
+              console.log(`Successfully loaded ${key} from localStorage (fallback):`, 
+                key === 'jobTypes' ? parsedData : `[${typeof parsedData}]`);
+              return parsedData;
+            } catch (parseError) {
+              console.error(`Error parsing ${key} from localStorage:`, parseError);
+            }
+          } catch (error) {
+            console.error(`Error accessing ${key} from localStorage:`, error);
+            return defaultValue;
+          }
+        };
+        
+        setSettings(loadFromStorage("settings", defaultSettings));
+        setJobTypes(loadFromStorage("jobTypes", defaultJobTypes));
+        setJobs(loadFromStorage("jobs", mockJobs));
+        setStaff(loadFromStorage("staff", mockStaff));
+        setMachines(loadFromStorage("machines", mockMachines));
+        setSchedule(loadFromStorage("schedule", mockSchedule));
+        setFeedback(loadFromStorage("feedback", []));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadAllData();
+  }, []);
+  
   // Apply filters to jobs
   useEffect(() => {
     let result = [...jobs];
@@ -342,68 +474,114 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDashboardMetrics(updatedMetrics);
   };
 
-  // Save data to localStorage when it changes - with debounce and error handling
-  const saveToStorage = (key: string, data: any) => {
+  // Save data to Supabase when it changes
+  const saveToSupabase = async (table: string, data: any, converter: (item: any) => any) => {
     try {
-      localStorage.setItem(key, JSON.stringify(data));
+      // Also save to localStorage as backup
+      localStorage.setItem(table, JSON.stringify(data));
+      
+      if (Array.isArray(data)) {
+        // For arrays, we need to upsert each item
+        const supabaseData = data.map(converter);
+        const { error } = await supabase.from(table).upsert(supabaseData);
+        
+        if (error) {
+          console.error(`Error saving ${table} to Supabase:`, error);
+        }
+      } else {
+        // For single objects like settings
+        const supabaseData = converter(data);
+        const { error } = await supabase.from(table).upsert(supabaseData);
+        
+        if (error) {
+          console.error(`Error saving ${table} to Supabase:`, error);
+        }
+      }
     } catch (error) {
-      console.error(`Error saving ${key} to localStorage:`, error);
+      console.error(`Error saving ${table} to Supabase:`, error);
+      // Ensure data is saved to localStorage
+      try {
+        localStorage.setItem(table, JSON.stringify(data));
+      } catch (localStorageError) {
+        console.error(`Error saving ${table} to localStorage:`, localStorageError);
+      }
     }
   };
 
   // Use a more efficient approach to save data and refresh dashboard
   useEffect(() => {
+    if (loading) return;
+    
     const timeoutId = setTimeout(() => {
-      saveToStorage("jobs", jobs);
+      saveToSupabase('jobs', jobs, jobToSupabase);
       refreshDashboard();
     }, 300); // Debounce for 300ms
+    
     return () => clearTimeout(timeoutId);
-  }, [jobs]);
+  }, [jobs, loading]);
 
   useEffect(() => {
+    if (loading) return;
+    
     const timeoutId = setTimeout(() => {
-      saveToStorage("staff", staff);
+      saveToSupabase('staff', staff, staffToSupabase);
       refreshDashboard();
     }, 300);
+    
     return () => clearTimeout(timeoutId);
-  }, [staff]);
+  }, [staff, loading]);
 
   useEffect(() => {
+    if (loading) return;
+    
     const timeoutId = setTimeout(() => {
-      saveToStorage("machines", machines);
+      saveToSupabase('machines', machines, machineToSupabase);
       refreshDashboard();
     }, 300);
+    
     return () => clearTimeout(timeoutId);
-  }, [machines]);
+  }, [machines, loading]);
 
   useEffect(() => {
+    if (loading) return;
+    
     const timeoutId = setTimeout(() => {
-      saveToStorage("schedule", schedule);
+      saveToSupabase('schedule_events', schedule, scheduleEventToSupabase);
       refreshDashboard();
     }, 300);
+    
     return () => clearTimeout(timeoutId);
-  }, [schedule]);
+  }, [schedule, loading]);
 
   useEffect(() => {
+    if (loading) return;
+    
     const timeoutId = setTimeout(() => {
-      saveToStorage("feedback", feedback);
+      saveToSupabase('feedback', feedback, feedbackToSupabase);
     }, 300);
+    
     return () => clearTimeout(timeoutId);
-  }, [feedback]);
+  }, [feedback, loading]);
 
   useEffect(() => {
+    if (loading) return;
+    
     const timeoutId = setTimeout(() => {
-      saveToStorage("settings", settings);
+      saveToSupabase('app_data', appSettingsToSupabase(settings), (data) => data);
     }, 300);
+    
     return () => clearTimeout(timeoutId);
-  }, [settings]);
+  }, [settings, loading]);
 
   useEffect(() => {
+    if (loading) return;
+    
     const timeoutId = setTimeout(() => {
-      saveToStorage("jobTypes", jobTypes);
+      saveToSupabase('job_types', jobTypes, jobTypeToSupabase);
     }, 300);
+    
     return () => clearTimeout(timeoutId);
-  }, [jobTypes]);
+  }, [jobTypes, loading]);
 
   // Job functions
   const addJob = (job: Omit<Job, "id" | "createdAt" | "updatedAt">): Job => {
@@ -414,7 +592,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createdAt: now,
       updatedAt: now,
     };
+    
     setJobs([...jobs, newJob]);
+    
+    // Save to Supabase
+    supabase.from('jobs').insert(jobToSupabase(newJob))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error adding job to Supabase:", error);
+        }
+      });
+      
     return newJob;
   };
 
@@ -423,7 +611,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...job,
       updatedAt: format(new Date(), "yyyy-MM-dd"),
     };
+    
     setJobs(jobs.map((j) => (j.id === job.id ? updatedJob : j)));
+    
+    // Save to Supabase
+    supabase.from('jobs').upsert(jobToSupabase(updatedJob))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error updating job in Supabase:", error);
+        }
+      });
   };
 
   const deleteJob = (id: string) => {
@@ -432,6 +629,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Also remove any schedule events associated with this job
     setSchedule(schedule.filter((event) => event.jobId !== id));
+    
+    // Delete from Supabase
+    Promise.all([
+      supabase.from('jobs').delete().eq('id', id),
+      supabase.from('schedule_events').delete().eq('job_id', id)
+    ]).catch(error => {
+      console.error("Error deleting job from Supabase:", error);
+    });
   };
 
   const getJobById = (id: string) => {
@@ -444,11 +649,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...staffMember,
       id: `staff-${Date.now()}`,
     };
+    
     setStaff([...staff, newStaffMember]);
+    
+    // Save to Supabase
+    supabase.from('staff').insert(staffToSupabase(newStaffMember))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error adding staff member to Supabase:", error);
+        }
+      });
   };
 
   const updateStaffMember = (staffMember: StaffMember) => {
     setStaff(staff.map((s) => (s.id === staffMember.id ? staffMember : s)));
+    
+    // Save to Supabase
+    supabase.from('staff').upsert(staffToSupabase(staffMember))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error updating staff member in Supabase:", error);
+        }
+      });
   };
 
   const deleteStaffMember = (id: string) => {
@@ -456,28 +678,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setStaff(staff.filter((s) => s.id !== id));
 
     // Update any jobs that were assigned to this staff member
-    setJobs(
-      jobs.map((job) => {
-        if (job.assignedTo === id) {
-          return {
-            ...job,
-            assignedTo: undefined,
-            updatedAt: format(new Date(), "yyyy-MM-dd"),
-          };
-        }
-        return job;
-      }),
-    );
+    const updatedJobs = jobs.map((job) => {
+      if (job.assignedTo === id) {
+        return {
+          ...job,
+          assignedTo: undefined,
+          updatedAt: format(new Date(), "yyyy-MM-dd"),
+        };
+      }
+      return job;
+    });
+    
+    setJobs(updatedJobs);
 
     // Remove staff from any scheduled events
-    setSchedule(
-      schedule.map((event) => {
-        if (event.staffId === id) {
-          return { ...event, staffId: undefined };
-        }
-        return event;
-      }),
-    );
+    const updatedSchedule = schedule.map((event) => {
+      if (event.staffId === id) {
+        return { ...event, staffId: undefined };
+      }
+      return event;
+    });
+    
+    setSchedule(updatedSchedule);
+    
+    // Delete from Supabase and update related records
+    Promise.all([
+      supabase.from('staff').delete().eq('id', id),
+      ...updatedJobs.filter(job => job.assignedTo === undefined).map(job => 
+        supabase.from('jobs').upsert(jobToSupabase(job))
+      ),
+      ...updatedSchedule.filter(event => event.staffId === undefined).map(event => 
+        supabase.from('schedule_events').upsert(scheduleEventToSupabase(event))
+      )
+    ]).catch(error => {
+      console.error("Error updating Supabase after staff deletion:", error);
+    });
   };
 
   const getStaffById = (id: string) => {
@@ -490,11 +725,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...machine,
       id: `machine-${Date.now()}`,
     };
+    
     setMachines([...machines, newMachine]);
+    
+    // Save to Supabase
+    supabase.from('machines').insert(machineToSupabase(newMachine))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error adding machine to Supabase:", error);
+        }
+      });
   };
 
   const updateMachine = (machine: Machine) => {
     setMachines(machines.map((m) => (m.id === machine.id ? machine : m)));
+    
+    // Save to Supabase
+    supabase.from('machines').upsert(machineToSupabase(machine))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error updating machine in Supabase:", error);
+        }
+      });
   };
 
   const deleteMachine = (id: string) => {
@@ -502,14 +754,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setMachines(machines.filter((m) => m.id !== id));
 
     // Update any schedule events that used this machine
-    setSchedule(
-      schedule.map((event) => {
-        if (event.machineId === id) {
-          return { ...event, machineId: undefined };
-        }
-        return event;
-      }),
-    );
+    const updatedSchedule = schedule.map((event) => {
+      if (event.machineId === id) {
+        return { ...event, machineId: undefined };
+      }
+      return event;
+    });
+    
+    setSchedule(updatedSchedule);
+    
+    // Delete from Supabase and update related records
+    Promise.all([
+      supabase.from('machines').delete().eq('id', id),
+      ...updatedSchedule.filter(event => event.machineId === undefined).map(event => 
+        supabase.from('schedule_events').upsert(scheduleEventToSupabase(event))
+      )
+    ]).catch(error => {
+      console.error("Error updating Supabase after machine deletion:", error);
+    });
   };
 
   const getMachineById = (id: string) => {
@@ -541,6 +803,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // No conflicts or only warnings, add the event
     setSchedule([...schedule, newEvent]);
+    
+    // Save to Supabase
+    supabase.from('schedule_events').insert(scheduleEventToSupabase(newEvent))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error adding schedule event to Supabase:", error);
+        }
+      });
+      
     return { 
       event: newEvent, 
       conflicts: [],
@@ -566,6 +837,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     // No conflicts or only warnings, update the event
     setSchedule(schedule.map((e) => (e.id === event.id ? event : e)));
+    
+    // Save to Supabase
+    supabase.from('schedule_events').upsert(scheduleEventToSupabase(event))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error updating schedule event in Supabase:", error);
+        }
+      });
+      
     return {
       conflicts: [],
       hasErrors: false
@@ -574,6 +854,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteScheduleEvent = (id: string) => {
     setSchedule(schedule.filter((e) => e.id !== id));
+    
+    // Delete from Supabase
+    supabase.from('schedule_events').delete().eq('id', id)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error deleting schedule event from Supabase:", error);
+        }
+      });
   };
 
   const getScheduleForDate = (date: Date) => {
@@ -819,20 +1107,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...feedbackItem,
       id: `feedback-${Date.now()}`,
     };
+    
     setFeedback([...feedback, newFeedback]);
+    
+    // Save to Supabase
+    supabase.from('feedback').insert(feedbackToSupabase(newFeedback))
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error adding feedback to Supabase:", error);
+        }
+      });
   };
 
   // Settings functions
   const updateBusinessHours = (hours: BusinessHours) => {
-    setSettings({
+    const updatedSettings = {
       ...settings,
       businessHours: hours,
-    });
+    };
+    
+    setSettings(updatedSettings);
+    
+    // Save to Supabase
+    supabase.from('app_data').upsert({
+      id: 'settings',
+      data: updatedSettings,
+      updated_at: new Date().toISOString()
+    })
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error updating business hours in Supabase:", error);
+        }
+      });
   };
 
   // Update job types
   const updateJobTypes = (types: JobTypeDefinition[]) => {
     setJobTypes(types);
+    
+    // Save to Supabase
+    const supabaseData = types.map(jobTypeToSupabase);
+    supabase.from('job_types').upsert(supabaseData)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error updating job types in Supabase:", error);
+        }
+      });
   };
 
   // Apply default business hours to a staff member's availability
@@ -930,6 +1250,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     updateBusinessHours,
     applyDefaultAvailabilityToStaff,
   };
+
+  // Show a loading state if data is still being fetched
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-xl">Loading data...</p>
+      </div>
+    );
+  }
 
   return (
     <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>

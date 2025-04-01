@@ -99,7 +99,8 @@ export interface ScheduleEvent {
 }
 
 export interface FeedbackItem {
-  submitter: string; // Staff ID
+  id?: string;
+  submitter: string;
   importance: "low" | "medium" | "high" | "critical";
   page: string;
   attemptedAction: string;

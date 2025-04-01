@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { format, addHours } from "date-fns";
+import { detectScheduleConflicts } from "@/lib/scheduling";
 
 interface ScheduleEventFormProps {
   event?: ScheduleEvent;
@@ -141,19 +142,28 @@ export default function ScheduleEventForm({
     const { endDate, endTime } = calculateEndTime();
     const endTimeISO = `${endDate}T${endTime}:00`;
 
-    // Check if this time slot is available for the staff member
-    const isSlotAvailable = checkStaffAvailability(
-      formData.staffId,
-      new Date(startTime),
-      new Date(endTimeISO),
-      event?.id,
+    // Create a temporary event object for conflict detection
+    const tempEvent: ScheduleEvent = {
+      id: event?.id || `temp-${Date.now()}`,
+      jobId: formData.jobId,
+      staffId: formData.staffId || undefined,
+      startTime,
+      endTime: endTimeISO,
+      notes: formData.notes || undefined,
+    };
+
+    // Use the main conflict detection function
+    const conflicts = detectScheduleConflicts(
+      tempEvent,
+      schedule,
+      staff,
+      isEditing
     );
 
-    if (!isSlotAvailable) {
+    if (conflicts.length > 0) {
       toast({
         title: "Scheduling Conflict",
-        description:
-          "This staff member is already scheduled during this time period.",
+        description: conflicts[0].message,
         variant: "destructive",
       });
       return;
@@ -179,32 +189,6 @@ export default function ScheduleEventForm({
       });
       navigate("/schedule");
     }
-  };
-
-  // Check if a staff member is available during the specified time period
-  const checkStaffAvailability = (
-    staffId: string,
-    startTime: Date,
-    endTime: Date,
-    currentEventId?: string,
-  ) => {
-    if (!staffId) return true; // If no staff assigned, no conflict
-
-    // Get all events for this staff member
-    const staffEvents = schedule.filter(
-      (event) =>
-        event.staffId === staffId &&
-        (!currentEventId || event.id !== currentEventId), // Exclude current event when editing
-    );
-
-    // Check for time conflicts
-    return !staffEvents.some((event) => {
-      const eventStart = new Date(event.startTime);
-      const eventEnd = new Date(event.endTime);
-
-      // Check if there's an overlap
-      return startTime < eventEnd && endTime > eventStart;
-    });
   };
 
   // Filter out completed and cancelled jobs

@@ -122,3 +122,116 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
     ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
+export type SupabaseStaff = {
+  id: string;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  skills: string[] | null;
+  job_type_capabilities: string[] | null;
+  availability: {
+    monday: boolean;
+    tuesday: boolean;
+    wednesday: boolean;
+    thursday: boolean;
+    friday: boolean;
+    saturday: boolean;
+    sunday: boolean;
+  };
+  assigned_jobs: string[] | null;
+  performance_metrics: {
+    completionRate: number;
+    onTimeRate: number;
+    qualityScore: number;
+  } | null;
+  availability_hours: {
+    monday?: { start: string; end: string };
+    tuesday?: { start: string; end: string };
+    wednesday?: { start: string; end: string };
+    thursday?: { start: string; end: string };
+    friday?: { start: string; end: string };
+    saturday?: { start: string; end: string };
+    sunday?: { start: string; end: string };
+  } | null;
+  blocked_times: Array<{
+    date: string;
+    start: string;
+    end: string;
+    reason?: string;
+  }> | null;
+  created_at: string;
+};
+
+export type SupabaseMachine = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  capabilities: string[] | null;
+  maintenance_schedule: any | null;
+  location: string | null;
+  hours_per_day: number | null;
+  created_at: string;
+};
+
+export type SupabaseJobType = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SupabaseJob = {
+  id: string;
+  title: string;
+  client: string;
+  description: string | null;
+  status: string;
+  deadline: string | null;
+  created_at: string;
+  updated_at: string;
+  assigned_to: string | null;
+  priority: string;
+  job_type: string;
+  file_url: string | null;
+  estimated_hours: number | null;
+  actual_hours: number | null;
+  notes: string | null;
+  required_machines: string[] | null;
+  dependencies: string[] | null;
+};
+
+export type SupabaseScheduleEvent = {
+  id: string;
+  job_id: string;
+  staff_id: string | null;
+  machine_id: string | null;
+  start_time: string;
+  end_time: string;
+  notes: string | null;
+  color: string | null;
+  is_auto_scheduled: boolean;
+  created_at: string;
+};
+
+export type SupabaseAppData = {
+  id: string;
+  data: any;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SupabaseFeedback = {
+  id: string;
+  submitter: string;
+  importance: string;
+  page: string;
+  attempted_action: string;
+  actual_result: string;
+  expected_result: string;
+  screenshot_url: string | null;
+  created_at: string;
+};
